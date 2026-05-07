@@ -11,8 +11,8 @@ struct Scalar {
 /// @notice Arithmetic library for the 255-bit BlueSky prime field.
 /// @dev The prime is p = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001.
 /// @dev All inputs and outputs are assumed to be in the canonical range [0, p).
-/// @dev Functions that call the `modexp` precompile (address 0x05) are marked `view` rather than
-///   `pure`.
+/// @dev Functions that call the `modexp` precompile (address 0x05) need to be marked `view` rather
+///   than `pure`.
 library ScalarMethods {
     /// @notice The BlueSky prime p.
     uint256 constant P =
@@ -67,7 +67,7 @@ library ScalarMethods {
 
     /// @notice Returns a raised to an integer power.
     /// @dev Calls the `modexp` precompile (EIP-198, address 0x05).
-    ///      Follows the precompile's convention: 0^0 = 1.
+    /// @dev Follows the precompile's convention: 0^0 = 1.
     /// @param a The base, in [0, p).
     /// @param exponent The exponent (any uint256; implicitly reduced mod p-1 by Fermat).
     /// @return The field element a^exponent mod p.
