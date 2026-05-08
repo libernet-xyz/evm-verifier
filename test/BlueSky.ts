@@ -9,11 +9,39 @@ const P = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001n;
 const TWO_INV =
   0x3fffffffffffffffffffffffffffffff0339eef94f4daaa3e000000000000001n;
 
+const ROOT_OF_UNITY =
+  0x2772569d549e1249ca6891eceba43568f6e0a747a2afe898b3977ca1a5bbfc9cn;
+
+const ROOT_OF_UNITY_INV =
+  0x76def406f046ef5ee7eeecd2c4e6ecd7cdedc4e2bcf6b19f1420121cd00b4cdbn;
+
 describe("BlueSky field arithmetic", function () {
   let harness: BlueSkyHarness;
 
   before(async function () {
     harness = await ethers.deployContract("BlueSkyHarness");
+  });
+
+  describe("constants", function () {
+    it("TWO_INV * 2 = 1", async function () {
+      const result = await harness.mul(TWO_INV, 2n);
+      expect(result).to.equal(1n);
+    });
+
+    it("ROOT_OF_UNITY^(2^62) = 1 (order divides 2^62)", async function () {
+      const result = await harness.pow(ROOT_OF_UNITY, 2n ** 62n);
+      expect(result).to.equal(1n);
+    });
+
+    it("ROOT_OF_UNITY^(2^61) != 1 (primitive, order is exactly 2^62)", async function () {
+      const result = await harness.pow(ROOT_OF_UNITY, 2n ** 61n);
+      expect(result).to.not.equal(1n);
+    });
+
+    it("ROOT_OF_UNITY * ROOT_OF_UNITY_INV = 1", async function () {
+      const result = await harness.mul(ROOT_OF_UNITY, ROOT_OF_UNITY_INV);
+      expect(result).to.equal(1n);
+    });
   });
 
   describe("add", function () {
