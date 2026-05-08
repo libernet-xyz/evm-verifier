@@ -296,7 +296,7 @@ describe("FRI verifier", function () {
             ],
           },
         ),
-      ).to.be.revertedWith("left Merkle proof failed");
+      ).to.be.revertedWithCustomError(harness, "InvalidFriQuery");
     });
 
     it("rejects tampered root hash", async function () {
@@ -321,7 +321,7 @@ describe("FRI verifier", function () {
             ],
           },
         ),
-      ).to.be.revertedWith("left Merkle proof failed");
+      ).to.be.revertedWithCustomError(harness, "InvalidFriQuery");
     });
   });
 });

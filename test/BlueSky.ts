@@ -202,7 +202,10 @@ describe("BlueSky field arithmetic", function () {
     });
 
     it("reverts on zero input", async function () {
-      await expect(harness.inv(0n)).to.be.revertedWith("zero");
+      await expect(harness.inv(0n)).to.be.revertedWithCustomError(
+        harness,
+        "ZeroDivisor",
+      );
     });
   });
 });

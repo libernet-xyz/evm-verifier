@@ -8,6 +8,9 @@ pragma solidity ^0.8.28;
 /// @dev Functions that call the `modexp` precompile (address 0x05) are marked `view` rather than
 ///   `pure`.
 library BlueSky {
+    /// @dev Reverted when zero is passed to `inv`.
+    error ZeroDivisor();
+
     /// @notice The BlueSky prime p.
     uint256 constant P =
         0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001;
@@ -81,7 +84,9 @@ library BlueSky {
     /// @param a The operand, in [0, p). Must be non-zero.
     /// @return The field element a^(-1) mod p.
     function inv(uint256 a) internal view returns (uint256) {
-        require(a != 0, "zero");
+        if (a == 0) {
+            revert ZeroDivisor();
+        }
         return _modexp(a, P_MINUS_2, P);
     }
 

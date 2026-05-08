@@ -39,6 +39,9 @@ struct FriQuery {
 library FriVerifier {
     using BlueSky for uint256;
 
+    /// @dev Reverted when any part of a FRI query proof fails to verify.
+    error InvalidFriQuery();
+
     /// @dev 2^256 mod P; needed to reduce the 512-bit double-SHA256 output to a field element.
     uint256 constant TWO_256_MOD_P =
         0x00000000000000000000000000000003f318441ac2c955707ffffffffffffffe;
@@ -175,9 +178,9 @@ library FriVerifier {
 
         uint256 h = rounds.length;
         uint256 k = _log2(n);
-        require(h == roots.length, "round count mismatch");
-        require(h > 0, "empty proof");
-        require(h <= k + 1, "invalid proof size");
+        if (h != roots.length || h == 0 || h > k + 1) {
+            revert InvalidFriQuery();
+        }
 
         uint256[] memory pos = rounds[0].left.leaf;
         uint256 step = BlueSky.ROOT_OF_UNITY_INV.pow(1 << (BlueSky.S - k));
@@ -188,24 +191,24 @@ library FriVerifier {
             MerkleProof memory right = rounds[r].right;
             uint256 rootHash = roots[r];
 
-            require(left.path.length == _log2(m), "invalid left proof height");
-            require(
-                right.path.length == _log2(m),
-                "invalid right proof height"
-            );
-            require(left.leaf.length == pos.length, "leaf length mismatch");
+            if (left.path.length != _log2(m) || right.path.length != _log2(m)) {
+                revert InvalidFriQuery();
+            }
+            if (left.leaf.length != pos.length) {
+                revert InvalidFriQuery();
+            }
             for (uint256 i = 0; i < pos.length; i++) {
-                require(left.leaf[i] == pos[i], "leaf value mismatch");
+                if (left.leaf[i] != pos[i]) {
+                    revert InvalidFriQuery();
+                }
             }
 
-            require(
-                verifyMerklePath(left, index, rootHash),
-                "left Merkle proof failed"
-            );
-            require(
-                verifyMerklePath(right, (index + m / 2) % m, rootHash),
-                "right Merkle proof failed"
-            );
+            if (!verifyMerklePath(left, index, rootHash)) {
+                revert InvalidFriQuery();
+            }
+            if (!verifyMerklePath(right, (index + m / 2) % m, rootHash)) {
+                revert InvalidFriQuery();
+            }
 
             uint256 omega_inv_i = step.pow(index);
             uint256 alpha = hashRaw(FOLD_DST, rootHash, 0).mul(GENERATOR_INV);
@@ -226,13 +229,10 @@ library FriVerifier {
             step = step.mul(step);
         }
 
-        require(
-            isConstant(rounds[h - 1].left),
-            "final left polynomial is not constant"
-        );
-        require(
-            isConstant(rounds[h - 1].right),
-            "final right polynomial is not constant"
-        );
+        if (
+            !isConstant(rounds[h - 1].left) || !isConstant(rounds[h - 1].right)
+        ) {
+            revert InvalidFriQuery();
+        }
     }
 }
