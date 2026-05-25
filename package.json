@@ -1,19 +1,19 @@
 {
-  "name": "solidity-verifier",
+  "name": "@starkom/evm-verifier",
   "version": "1.0.0",
   "scripts": {},
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/libernet-mirror/solidity-verifier.git"
+    "url": "git+https://github.com/libernet-xyz/evm-verifier.git"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/libernet-mirror/solidity-verifier/issues"
+    "url": "https://github.com/libernet-xyz/evm-verifier/issues"
   },
-  "homepage": "https://github.com/libernet-mirror/solidity-verifier#readme",
-  "description": "",
+  "homepage": "https://github.com/libernet-xyz/evm-verifier#readme",
+  "description": "Starkom proof verifier for the EVM.",
   "type": "module",
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.10",
