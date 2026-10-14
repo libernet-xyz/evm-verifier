@@ -186,7 +186,7 @@ describe("BlueSky field arithmetic", function () {
       expect(await harness.pow(root, 3n ** 39n)).to.equal(1n);
     });
 
-    it("THREE_ADIC_ROOT_OF_UNITY^(3^38) != 1 (primitive, order is exactly 3^39)", async function () {
+    it("THREE_ADIC_ROOT_OF_UNITY^(3^38) != 1 (primitive, order is 3^39)", async function () {
       const root = await harness.threeAdicRootOfUnity();
       expect(await harness.pow(root, 3n ** 38n)).to.not.equal(1n);
     });

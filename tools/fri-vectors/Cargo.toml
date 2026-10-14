@@ -1,0 +1,12 @@
+[package]
+name = "fri-vectors"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+primitive-types = "0.14.0"
+starkom-bluesky = "=3.7.2"
+starkom-ff = "=4.1.0"
+starkom-pcs = "=8.0.1"
+starkom-poly = "=4.6.1"
