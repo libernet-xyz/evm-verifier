@@ -4,8 +4,9 @@ pragma solidity ^0.8.28;
 import "./BlueSky.sol";
 import "./Keccak256Hash.sol";
 
-/// @notice A Merkle proof for one leaf of a Merkle tree.
-/// @dev Matches `starkom_pcs::merkle::Proof` and the `LeafProof` protobuf.
+/// @notice A Merkle proof for one leaf of a Merkle tree with vector leaves.
+/// @dev Matches `starkom_pcs::merkle::Proof` and the `MerkleProof` protobuf. These are used for the
+///   committed polynomial batches; FRI trees have scalar leaves (see `FriLeafProof`).
 struct LeafProof {
     /// @dev The opened leaf values, one for every committed polynomial, in [0, P).
     uint256[] leaf;
@@ -58,8 +59,24 @@ library Merkle {
         uint256 index,
         bytes32 rootHash
     ) internal pure {
-        bytes32 hash = hashLeaf(proof.leaf);
-        bytes32[] memory path = proof.path;
+        verifyPath(hashLeaf(proof.leaf), proof.path, index, rootHash);
+    }
+
+    /// @notice Recomputes a Merkle root from a leaf and its Merkle path, and checks it against
+    ///   `rootHash`, reverting if they differ.
+    /// @dev Matches `merkle::verify_path`. `leaf` is the hash of the leaf values for vector leaves,
+    ///   or the leaf itself for trees whose leaves are single 32-byte values, like the FRI ones.
+    /// @param leaf The 32-byte leaf.
+    /// @param path The sibling hashes along the leaf-to-root path, excluding the root.
+    /// @param index The leaf index, which determines the left/right position at each level.
+    /// @param rootHash The expected Merkle root.
+    function verifyPath(
+        bytes32 leaf,
+        bytes32[] memory path,
+        uint256 index,
+        bytes32 rootHash
+    ) internal pure {
+        bytes32 hash = leaf;
         for (uint256 i = 0; i < path.length; i++) {
             if (index & 1 != 0) {
                 hash = Keccak256Hash.hashBinary(path[i], hash);
@@ -74,20 +91,5 @@ library Merkle {
         if (hash != rootHash) {
             revert RootHashMismatch(hash, rootHash);
         }
-    }
-
-    /// @notice Returns true iff all the committed polynomials are constant.
-    /// @dev A proof witnesses constant polynomials when every sibling hash equals the running hash,
-    ///   which happens when all leaves of the tree are identical. Matches `Proof::is_constant`.
-    function isConstant(LeafProof memory proof) internal pure returns (bool) {
-        bytes32 hash = hashLeaf(proof.leaf);
-        bytes32[] memory path = proof.path;
-        for (uint256 i = 0; i < path.length; i++) {
-            if (path[i] != hash) {
-                return false;
-            }
-            hash = Keccak256Hash.hashBinary(hash, hash);
-        }
-        return true;
     }
 }

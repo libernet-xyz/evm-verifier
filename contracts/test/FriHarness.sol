@@ -15,6 +15,13 @@ contract FriHarness {
         return FriVerifier.foldingChallenge(rootHash);
     }
 
+    function reverseBits(
+        uint256 index,
+        uint256 numBits
+    ) external pure returns (uint256) {
+        return FriVerifier.reverseBits(index, numBits);
+    }
+
     function verifyQuery(
         uint256 degreeBound,
         uint256 blowupLog2,

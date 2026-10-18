@@ -27,7 +27,12 @@ contract MerkleHarness {
         Merkle.verify(proof, index, rootHash);
     }
 
-    function isConstant(LeafProof calldata proof) external pure returns (bool) {
-        return Merkle.isConstant(proof);
+    function verifyPath(
+        bytes32 leaf,
+        bytes32[] calldata path,
+        uint256 index,
+        bytes32 rootHash
+    ) external pure {
+        Merkle.verifyPath(leaf, path, index, rootHash);
     }
 }
