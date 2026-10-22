@@ -9,6 +9,14 @@ contract FriHarness {
         return FriVerifier.FOLD_DST;
     }
 
+    function numRounds(
+        uint256 degreeBound,
+        uint256 foldRate,
+        uint256 maxRounds
+    ) external pure returns (uint256) {
+        return FriVerifier.numRounds(degreeBound, foldRate, maxRounds);
+    }
+
     function foldingChallenge(
         bytes32 rootHash
     ) external pure returns (uint256) {
@@ -22,12 +30,31 @@ contract FriHarness {
         return FriVerifier.reverseBits(index, numBits);
     }
 
+    /// @dev Validates the commitment and verifies a single query against it.
     function verifyQuery(
-        uint256 degreeBound,
-        uint256 blowupLog2,
+        FriOptions calldata options,
         FriQuery calldata query,
-        FriCommitment calldata commitment
+        FriCommitment calldata commitment,
+        uint256 value
     ) external view {
-        FriVerifier.verifyQuery(degreeBound, blowupLog2, query, commitment);
+        FriVerifier.validateCommitment(commitment);
+        FriVerifier.verifyQuery(options, query, commitment, value);
+    }
+
+    /// @dev Validates the commitment once and verifies all the queries against it, with
+    ///   `values[i]` being the expected evaluation of `queries[i]`. The options and the commitment
+    ///   are copied to memory only once.
+    function verifyQueries(
+        FriOptions calldata options,
+        FriQuery[] calldata queries,
+        FriCommitment calldata commitment,
+        uint256[] calldata values
+    ) external view {
+        FriOptions memory decodedOptions = options;
+        FriCommitment memory decodedCommitment = commitment;
+        FriVerifier.validateCommitment(decodedCommitment);
+        for (uint256 i = 0; i < queries.length; i++) {
+            FriVerifier.verifyQuery(decodedOptions, queries[i], decodedCommitment, values[i]);
+        }
     }
 }

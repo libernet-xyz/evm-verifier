@@ -5,38 +5,63 @@ import "./BlueSky.sol";
 import "./Keccak256Hash.sol";
 import "./Merkle.sol";
 
-/// @notice The Merkle root hashes of a FRI commitment.
-/// @dev roots[0] is the root of the main Merkle tree and roots[k] is the root of the tree from the
-///   k-th folding round. Matches `starkom_pcs::fri::Commitment`.
-struct FriCommitment {
-    bytes32[] roots;
+/// @notice The parameters of the FRI protocol.
+/// @dev Matches the FRI parameters of `starkom_pcs::Options` (the `degree_bound`, `blowup_log2`,
+///   `fold_rate`, and `max_rounds` fields of the `Proof` protobuf).
+struct FriOptions {
+    /// @dev The degree bound of the committed polynomial, a power of 2.
+    uint256 degreeBound;
+    /// @dev The base-2 logarithm of the blowup factor, greater than 0.
+    uint256 blowupLog2;
+    /// @dev The number of folds per round, that is the base-2 logarithm of the folding arity,
+    ///   greater than 0.
+    uint256 foldRate;
+    /// @dev The maximum number of folding rounds (see `FriVerifier.numRounds`).
+    uint256 maxRounds;
 }
 
-/// @notice A Merkle proof for a pair of partner FRI leaves.
-/// @dev Matches `starkom_pcs::fri::LeafProof`. FRI works on a single polynomial, so the leaves of
-///   its Merkle trees are the evaluations themselves rather than hashes of them: each leaf is the
-///   32-byte big-endian encoding of a canonical field element, i.e. `bytes32(value)`.
+/// @notice A FRI commitment.
+/// @dev Matches `starkom_pcs::fri::Commitment`, that is the `fri_roots` and `folded_quotient`
+///   fields of the `Proof` protobuf.
+struct FriCommitment {
+    /// @dev The Merkle roots of the folding rounds, one for every round: roots[0] is the root of
+    ///   the tree of the committed polynomial and roots[j] that of the polynomial folded by the
+    ///   first j rounds.
+    bytes32[] roots;
+    /// @dev The coefficients of the polynomial resulting from the last round, in ascending degree
+    ///   order, each in [0, P). They're the coefficients of the domain-shifted polynomial, so they
+    ///   are evaluated at the roots of unity of the folded domain.
+    uint256[] foldedQuotient;
+}
+
+/// @notice A Merkle proof for a coset of FRI leaves.
+/// @dev Matches `starkom_pcs::fri::LeafProof` and the `Query.LeafProof` protobuf. FRI works on a
+///   single polynomial, so the leaves of its Merkle trees are the evaluations themselves rather
+///   than hashes of them: each leaf is the 32-byte big-endian encoding of a canonical field
+///   element, i.e. `bytes32(value)`.
 ///
 ///   The evaluations are stored in bit-reversed order: the one at index `i` of a domain of size
-///   2^k is in the leaf at position `reverseBits(i, k)`. The partners at `i` and `i + 2^(k-1)`
-///   (that is at `x` and `-x`) are therefore siblings, so a single proof opens both.
+///   2^k is in the leaf at position `reverseBits(i, k)`. The 2^r evaluations folded together by a
+///   round with fold rate r (at indices `i + j * 2^(k-r)`) are therefore the leaves of a subtree
+///   of height r, so a single proof opens all of them. For example, with r = 1 they are the
+///   partners at `i` and `i + 2^(k-1)`, that is at `x` and `-x`.
 struct FriLeafProof {
-    /// @dev The opened evaluation at the queried index, in [0, P).
-    uint256 value;
-    /// @dev The Merkle path from the leaf up to, but excluding, the root. The first element is the
-    ///   sibling leaf, that is the partner evaluation, and the following ones are the siblings of
-    ///   the ancestors of the leaf.
+    /// @dev The 2^r evaluations of the coset in bit-reversed order, each in [0, P). One of them is
+    ///   the evaluation at the queried index.
+    uint256[] coset;
+    /// @dev The Merkle path from the root of the coset subtree up to, but excluding, the root of
+    ///   the tree. The verifier recomputes the subtree root from the coset.
     bytes32[] path;
 }
 
 /// @notice A single FRI query.
-/// @dev Matches the `Query` protobuf. The degree bound and the blowup factor are not part of it
-///   because all the queries of a proof share them.
+/// @dev Matches the `Query` protobuf. The FRI parameters are not part of it because all the
+///   queries of a proof share them.
 struct FriQuery {
     /// @dev The queried index in the extended domain (not the position of the leaf in the tree).
     uint256 index;
-    /// @dev One Merkle proof for every Merkle tree of the folding argument, opening the queried
-    ///   index and its partner. folds[0] proves the opened evaluations of the committed polynomial.
+    /// @dev One Merkle proof for every folding round, opening the coset of the queried index
+    ///   folded by that round. There are none if there are zero rounds.
     FriLeafProof[] folds;
 }
 
@@ -52,36 +77,54 @@ library FriVerifier {
     /// @dev Reverted when the base-2 logarithm of the blowup factor is zero.
     error InvalidBlowupFactor();
 
+    /// @dev Reverted when the fold rate is zero.
+    error InvalidFoldRate();
+
     /// @dev Reverted when the extended domain doesn't fit in the 2-adicity of the field.
     error DomainTooLarge(uint256 degreeBoundLog2, uint256 blowupLog2);
-
-    /// @dev Reverted when the query has no folds.
-    error NoFolds();
-
-    /// @dev Reverted when a Merkle path is empty, so it doesn't contain the partner leaf.
-    error MissingPartner();
 
     /// @dev Reverted when the query index is outside the extended domain.
     error InvalidQueryIndex(uint256 index, uint256 domainSize);
 
-    /// @dev Reverted when the query has more folds than the degree bound allows.
+    /// @dev Reverted when the number of folds of a query differs from the number of rounds.
     error IncorrectProofSize();
 
-    /// @dev Reverted when the numbers of folds and commitment roots differ.
+    /// @dev Reverted when a Merkle proof doesn't open a coset of 2^r values.
+    error InvalidCosetSize(uint256 got, uint256 want);
+
+    /// @dev Reverted when the number of commitment roots differs from the number of rounds.
     error WrongNumberOfFoldingRounds();
+
+    /// @dev Reverted when the folded quotient has more coefficients than the rounds allow.
+    error InvalidFoldedQuotientSize(uint256 got, uint256 maximum);
 
     /// @dev Reverted when a Merkle path has the wrong height.
     error InvalidProofHeight(uint256 got, uint256 want);
 
-    /// @dev Reverted when the opened leaf of a round differs from the previous fold.
+    /// @dev Reverted when the opened evaluation at the queried index differs from the expected
+    ///   one, that is the one provided by the caller in the first round or the result of folding
+    ///   the previous round.
     error LeafValueMismatch();
 
-    /// @dev Reverted when the polynomial of the last round is not constant.
-    error FinalPolynomialNotConstant();
+    /// @dev Reverted when the result of the last round differs from the folded quotient.
+    error FoldedQuotientMismatch();
 
     /// @dev Domain separator for the folding challenges: `SHA3-256("starkom/fri/fold")`.
     bytes32 constant FOLD_DST =
         0x9ffd3556faeb2cae194ce95adf6b3580f590504daa0dea56966ce4ef233844af;
+
+    /// @notice Returns the number of folding rounds.
+    /// @dev Matches `fri::num_rounds`. Every round performs exactly `foldRate` folds, so there can
+    ///   be at most log2(degreeBound) / foldRate rounds (rounded down), and their number is further
+    ///   capped by `maxRounds`. Requires a power-of-2 `degreeBound` and a non-zero `foldRate`.
+    function numRounds(
+        uint256 degreeBound,
+        uint256 foldRate,
+        uint256 maxRounds
+    ) internal pure returns (uint256) {
+        uint256 rounds = _log2(degreeBound) / foldRate;
+        return rounds < maxRounds ? rounds : maxRounds;
+    }
 
     /// @notice Derives the folding challenge of a round from the Merkle root of that round.
     function foldingChallenge(
@@ -92,85 +135,69 @@ library FriVerifier {
         return Keccak256Hash.challenge(FOLD_DST, transcript);
     }
 
+    /// @notice Checks that all the coefficients of the folded quotient of a commitment are
+    ///   canonical field elements, reverting otherwise.
+    /// @dev Performs the checks of `Proof::from_proto` on the FRI commitment. Callers must invoke
+    ///   it once per commitment, before verifying its queries with `verifyQuery`. Hashes can't be
+    ///   out of range with the Keccak-256 backend.
+    function validateCommitment(FriCommitment memory commitment) internal pure {
+        uint256[] memory coefficients = commitment.foldedQuotient;
+        for (uint256 i = 0; i < coefficients.length; i++) {
+            _checkCanonical(coefficients[i]);
+        }
+    }
+
     /// @notice Verifies a FRI query against a commitment, reverting if it's invalid.
-    /// @dev Performs the checks of both `Query::from_proto` and `Query::verify`.
+    /// @dev Performs the checks of both `Query::from_proto` and `Query::verify`. The commitment
+    ///   must have been validated with `validateCommitment`.
     ///
-    ///   For low-degree testing the caller must also check that `query.folds.length` equals
-    ///   log2(degreeBound) + 1, as this function only verifies the opened values across the folding
-    ///   structure.
+    ///   Every round checks that the opened coset contains the expected evaluation at the queried
+    ///   index, checks the coset against the Merkle root of the round, and folds it to get the
+    ///   expected evaluation of the next round. The result of the last round, or `value` itself if
+    ///   there are zero rounds, must match the evaluation of the folded quotient.
     ///
-    ///   Unlike the Rust implementation, which computes omega^(-index) with a separate
-    ///   exponentiation in every round, this function computes it only once and squares it in every
-    ///   subsequent round. The two are equivalent: if `step` is the inverse of a primitive 2^k-th
-    ///   root of unity, `step^(index mod 2^(k-1))` in the next round equals
-    ///   `(step^2)^index = (step^index)^2` because `step^2` has order 2^(k-1).
-    ///
-    ///   Similarly, the position of the opened leaf is bit-reversed only once: the next round opens
-    ///   the folded evaluation at `index mod 2^(k-1)`, whose position `reverseBits(index, k) >> 1`
-    ///   is that of the parent of the current pair of partners.
-    /// @param degreeBound The degree bound of the committed polynomial, a power of 2.
-    /// @param blowupLog2 The base-2 logarithm of the blowup factor, greater than 0.
+    ///   The position of the opened coset is bit-reversed only once: the next round opens the
+    ///   folded evaluation at `index mod 2^(k-r)`, whose position `reverseBits(index, k) >> r` is
+    ///   that of the root of the current coset subtree.
+    /// @param options The FRI parameters.
     /// @param query The query to verify.
-    /// @param commitment The commitment containing the Merkle root of every folding round.
+    /// @param commitment The FRI commitment.
+    /// @param value The expected evaluation of the committed polynomial at the queried index, in
+    ///   [0, P). In DEEP-FRI it's computed from the openings of the committed polynomials.
     function verifyQuery(
-        uint256 degreeBound,
-        uint256 blowupLog2,
+        FriOptions memory options,
         FriQuery memory query,
-        FriCommitment memory commitment
+        FriCommitment memory commitment,
+        uint256 value
     ) internal view {
-        uint256 degreeBoundLog2 = _validate(degreeBound, blowupLog2, query);
-
-        // Checks from `Query::verify`.
-        FriLeafProof[] memory folds = query.folds;
-        uint256 numFolds = folds.length;
-        uint256 k = degreeBoundLog2 + blowupLog2;
+        uint256 rounds = _validate(options, query, commitment);
+        uint256 foldRate = options.foldRate;
+        uint256 k = _log2(options.degreeBound) + options.blowupLog2;
         uint256 index = query.index;
-        if (index >= 1 << k) {
-            revert InvalidQueryIndex(index, 1 << k);
+        if (rounds > 0) {
+            uint256[] memory rootsInverse = _rootsOfUnityInverse(foldRate);
+            uint256 position = reverseBits(index, k);
+            for (uint256 round = 0; round < rounds; round++) {
+                value = _verifyRound(
+                    query.folds[round],
+                    commitment.roots[round],
+                    index,
+                    position,
+                    k,
+                    foldRate,
+                    value,
+                    rootsInverse
+                );
+                k -= foldRate;
+                index &= (1 << k) - 1;
+                position >>= foldRate;
+            }
         }
-        if (numFolds > degreeBoundLog2 + 1) {
-            revert IncorrectProofSize();
-        }
-        bytes32[] memory roots = commitment.roots;
-        if (roots.length != numFolds) {
-            revert WrongNumberOfFoldingRounds();
-        }
-
-        uint256 positive = folds[0].value;
-
-        // omega^(-index), with omega being the primitive n-th root of unity. Here index < 2^k so
-        // the exponent is less than 2^S.
-        uint256 omegaInverse = BlueSky.ROOT_OF_UNITY_INV.pow(
-            index << (BlueSky.S - k)
-        );
-
-        uint256 position = reverseBits(index, k);
-
-        for (uint256 round = 0; round < numFolds; round++) {
-            bytes32 rootHash = roots[round];
-            uint256 negative = _verifyRound(
-                folds[round],
-                positive,
-                position,
-                k,
-                rootHash
-            );
-            k -= 1;
-            position >>= 1;
-            // positive = (positive + negative + alpha * omega^(-index) * (positive - negative)) / 2
-            positive = positive
-                .add(negative)
-                .add(
-                    foldingChallenge(rootHash).mul(omegaInverse).mul(
-                        positive.sub(negative)
-                    )
-                )
-                .mul(BlueSky.TWO_INV);
-            omegaInverse = omegaInverse.square();
-        }
-
-        if (!_isConstant(folds[numFolds - 1])) {
-            revert FinalPolynomialNotConstant();
+        // `evaluate_on_two_adic_domain`: the folded quotient is evaluated at omega^index, with
+        // omega being the primitive 2^k-th root of unity.
+        uint256 x = BlueSky.ROOT_OF_UNITY.pow(index << (BlueSky.S - k));
+        if (_evaluate(commitment.foldedQuotient, x) != value) {
+            revert FoldedQuotientMismatch();
         }
     }
 
@@ -186,33 +213,54 @@ library FriVerifier {
         }
     }
 
-    /// @dev Performs the checks of `Query::from_proto` and returns log2(degreeBound).
+    /// @dev Checks the FRI parameters, performs the checks of `Query::from_proto` on the query and
+    ///   those of `Query::verify` on the shape of the commitment, and returns the number of rounds.
     function _validate(
-        uint256 degreeBound,
-        uint256 blowupLog2,
-        FriQuery memory query
-    ) private pure returns (uint256 degreeBoundLog2) {
+        FriOptions memory options,
+        FriQuery memory query,
+        FriCommitment memory commitment
+    ) private pure returns (uint256 rounds) {
+        uint256 degreeBound = options.degreeBound;
         if (degreeBound == 0 || degreeBound & (degreeBound - 1) != 0) {
             revert InvalidDegreeBound(degreeBound);
         }
-        if (blowupLog2 == 0) {
+        if (options.blowupLog2 == 0) {
             revert InvalidBlowupFactor();
         }
-        degreeBoundLog2 = _log2(degreeBound);
-        if (degreeBoundLog2 + blowupLog2 > BlueSky.S) {
-            revert DomainTooLarge(degreeBoundLog2, blowupLog2);
+        if (options.foldRate == 0) {
+            revert InvalidFoldRate();
         }
+        uint256 degreeBoundLog2 = _log2(degreeBound);
+        if (degreeBoundLog2 + options.blowupLog2 > BlueSky.S) {
+            revert DomainTooLarge(degreeBoundLog2, options.blowupLog2);
+        }
+
+        uint256 domainSize = degreeBound << options.blowupLog2;
+        if (query.index >= domainSize) {
+            revert InvalidQueryIndex(query.index, domainSize);
+        }
+        rounds = numRounds(degreeBound, options.foldRate, options.maxRounds);
         FriLeafProof[] memory folds = query.folds;
-        if (folds.length == 0) {
-            revert NoFolds();
+        if (folds.length != rounds) {
+            revert IncorrectProofSize();
         }
-        for (uint256 round = 0; round < folds.length; round++) {
-            FriLeafProof memory proof = folds[round];
-            _checkCanonical(proof.value);
-            if (proof.path.length == 0) {
-                revert MissingPartner();
+        uint256 cosetSize = 1 << options.foldRate;
+        for (uint256 round = 0; round < rounds; round++) {
+            uint256[] memory coset = folds[round].coset;
+            if (coset.length != cosetSize) {
+                revert InvalidCosetSize(coset.length, cosetSize);
             }
-            _checkCanonical(uint256(proof.path[0]));
+            for (uint256 i = 0; i < cosetSize; i++) {
+                _checkCanonical(coset[i]);
+            }
+        }
+
+        if (commitment.roots.length != rounds) {
+            revert WrongNumberOfFoldingRounds();
+        }
+        uint256 maximum = degreeBound >> (rounds * options.foldRate);
+        if (commitment.foldedQuotient.length > maximum) {
+            revert InvalidFoldedQuotientSize(commitment.foldedQuotient.length, maximum);
         }
     }
 
@@ -223,41 +271,115 @@ library FriVerifier {
         }
     }
 
-    /// @dev Performs the checks of one round of `Query::verify` and returns the partner value.
-    ///   `positive` is the value expected in the opened leaf, `position` is the position of the
-    ///   opened leaf in the tree, and `k` is the log2 of the current domain size.
+    /// @dev Performs the checks of one round of `Query::verify` and returns the folded evaluation,
+    ///   which is the expected evaluation of the next round. `index` is the queried index in the
+    ///   domain of size 2^k of the round, `position` its bit-reversed position in the tree, `value`
+    ///   the expected evaluation at `index`, and `rootsInverse` the table returned by
+    ///   `_rootsOfUnityInverse`.
     function _verifyRound(
         FriLeafProof memory proof,
-        uint256 positive,
+        bytes32 rootHash,
+        uint256 index,
         uint256 position,
         uint256 k,
-        bytes32 rootHash
-    ) private pure returns (uint256) {
-        if (proof.path.length != k) {
-            revert InvalidProofHeight(proof.path.length, k);
+        uint256 foldRate,
+        uint256 value,
+        uint256[] memory rootsInverse
+    ) private view returns (uint256) {
+        if (proof.path.length + foldRate != k) {
+            revert InvalidProofHeight(proof.path.length + foldRate, k);
         }
-        if (proof.value != positive) {
+        uint256[] memory coset = proof.coset;
+        if (coset[position & (coset.length - 1)] != value) {
             revert LeafValueMismatch();
         }
-        Merkle.verifyPath(bytes32(proof.value), proof.path, position, rootHash);
-        return uint256(proof.path[0]);
+        Merkle.verifyPath(_cosetRoot(coset), proof.path, position >> foldRate, rootHash);
+        // omega^(-baseIndex), with omega being the primitive 2^k-th root of unity and `baseIndex`
+        // the smallest index of the coset.
+        uint256 baseIndex = index & ((1 << (k - foldRate)) - 1);
+        uint256 xInverse = BlueSky.ROOT_OF_UNITY_INV.pow(baseIndex << (BlueSky.S - k));
+        return _foldCoset(coset, xInverse, rootsInverse, foldingChallenge(rootHash));
     }
 
-    /// @dev Returns true iff the proof witnesses a tree whose leaves are all equal, i.e. the
-    ///   evaluations of a constant polynomial. That's the case if and only if every sibling equals
-    ///   the hash computed so far, starting from the leaf itself. Matches `LeafProof::is_constant`.
-    function _isConstant(
-        FriLeafProof memory proof
-    ) private pure returns (bool) {
-        bytes32 hash = bytes32(proof.value);
-        bytes32[] memory path = proof.path;
-        for (uint256 i = 0; i < path.length; i++) {
-            if (path[i] != hash) {
-                return false;
-            }
-            hash = Keccak256Hash.hashBinary(hash, hash);
+    /// @dev Returns the root of the Merkle subtree whose leaves are the given coset, matching
+    ///   `merkle::merkle_root`. The number of values must be a power of 2.
+    function _cosetRoot(uint256[] memory coset) private pure returns (bytes32) {
+        uint256 size = coset.length;
+        bytes32[] memory nodes = new bytes32[](size);
+        for (uint256 i = 0; i < size; i++) {
+            nodes[i] = bytes32(coset[i]);
         }
-        return true;
+        while (size > 1) {
+            size /= 2;
+            for (uint256 i = 0; i < size; i++) {
+                nodes[i] = Keccak256Hash.hashBinary(nodes[2 * i], nodes[2 * i + 1]);
+            }
+        }
+        return nodes[0];
+    }
+
+    /// @dev Returns the 2^foldRate powers of the inverse of the primitive 2^foldRate-th root of
+    ///   unity: the element at position j is omega^(-j).
+    function _rootsOfUnityInverse(
+        uint256 foldRate
+    ) private view returns (uint256[] memory roots) {
+        uint256 size = 1 << foldRate;
+        roots = new uint256[](size);
+        uint256 generator = BlueSky.ROOT_OF_UNITY_INV.pow(1 << (BlueSky.S - foldRate));
+        uint256 power = BlueSky.ONE;
+        for (uint256 j = 0; j < size; j++) {
+            roots[j] = power;
+            power = power.mul(generator);
+        }
+    }
+
+    /// @dev Folds a coset of 2^r evaluations into a single evaluation of the folded polynomial,
+    ///   overwriting `values`. Matches `Query::fold_coset`.
+    ///
+    ///   `values` contains the evaluations at indices `baseIndex + j * 2^(k-r)` of a domain of size
+    ///   2^k, in bit-reversed order of j. `xInverse` is omega^(-baseIndex), with omega being the
+    ///   primitive 2^k-th root of unity, and `rootsInverse` is the table returned by
+    ///   `_rootsOfUnityInverse`. The coset is folded r times with the challenges `alpha`,
+    ///   `alpha^2`, `alpha^4`, and so on. Fold number s combines adjacent values, which are the
+    ///   evaluations at x and -x, where x^(-1) is the `2^s`-th power of
+    ///   `omega^(-baseIndex - reverseBits(i) * 2^(k-r))`, that is
+    ///   `xInverse^(2^s) * rootsInverse[reverseBits(i) * 2^s]`.
+    function _foldCoset(
+        uint256[] memory values,
+        uint256 xInverse,
+        uint256[] memory rootsInverse,
+        uint256 alpha
+    ) private pure returns (uint256) {
+        uint256 size = values.length;
+        for (uint256 step = 0; size > 1; step++) {
+            size /= 2;
+            uint256 numBits = _log2(size);
+            for (uint256 i = 0; i < size; i++) {
+                uint256 positive = values[2 * i];
+                uint256 negative = values[2 * i + 1];
+                uint256 pointInverse = xInverse.mul(
+                    rootsInverse[reverseBits(i, numBits) << step]
+                );
+                // (positive + negative + alpha * x^(-1) * (positive - negative)) / 2
+                values[i] = positive
+                    .add(negative)
+                    .add(alpha.mul(pointInverse).mul(positive.sub(negative)))
+                    .mul(BlueSky.TWO_INV);
+            }
+            xInverse = xInverse.square();
+            alpha = alpha.square();
+        }
+        return values[0];
+    }
+
+    /// @dev Evaluates a polynomial at `x` with Horner's method.
+    function _evaluate(
+        uint256[] memory coefficients,
+        uint256 x
+    ) private pure returns (uint256 result) {
+        for (uint256 i = coefficients.length; i > 0; i--) {
+            result = result.mul(x).add(coefficients[i - 1]);
+        }
     }
 
     /// @dev Returns log2(n) for a power of 2 n.
