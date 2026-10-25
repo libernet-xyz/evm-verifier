@@ -203,27 +203,27 @@ describe("FRI verifier", function () {
       );
     });
 
-    it("rejects a tampered folded quotient", async function () {
+    it("rejects a tampered folded polynomial", async function () {
       const commitment = honestCommitment();
-      commitment.foldedQuotient[0] = (commitment.foldedQuotient[0] + 1n) % P;
+      commitment.foldedPolynomial[0] = (commitment.foldedPolynomial[0] + 1n) % P;
       await expect(verify(honestQuery(), commitment)).to.be.revertedWithCustomError(
         harness,
-        "FoldedQuotientMismatch"
+        "FoldedPolynomialMismatch"
       );
     });
 
-    it("rejects an oversized folded quotient", async function () {
+    it("rejects an oversized folded polynomial", async function () {
       const commitment = honestCommitment();
-      commitment.foldedQuotient.push(0n);
+      commitment.foldedPolynomial.push(0n);
       await expect(verify(honestQuery(), commitment))
-        .to.be.revertedWithCustomError(harness, "InvalidFoldedQuotientSize")
+        .to.be.revertedWithCustomError(harness, "InvalidFoldedPolynomialSize")
         .withArgs(2n, 1n);
     });
 
-    it("rejects an oversized folded quotient without rounds", async function () {
+    it("rejects an oversized folded polynomial without rounds", async function () {
       const testCase = findCase("polynomial of degree 7 without rounds");
       const commitment = structuredClone(testCase.commitment);
-      commitment.foldedQuotient.push(0n);
+      commitment.foldedPolynomial.push(0n);
       await expect(
         verify(
           structuredClone(testCase.queries[QUERY_INDEX]),
@@ -232,18 +232,18 @@ describe("FRI verifier", function () {
           testCase.options
         )
       )
-        .to.be.revertedWithCustomError(harness, "InvalidFoldedQuotientSize")
+        .to.be.revertedWithCustomError(harness, "InvalidFoldedPolynomialSize")
         .withArgs(9n, 8n);
     });
 
-    it("accepts a trimmed folded quotient", async function () {
-      // The polynomial has degree less than 2, so after one round its folded quotient has 4
-      // coefficients of which only the first is non-zero. A shorter folded quotient proves a
+    it("accepts a trimmed folded polynomial", async function () {
+      // The polynomial has degree less than 2, so after one round its folded polynomial has 4
+      // coefficients of which only the first is non-zero. A shorter folded polynomial proves a
       // stronger degree bound.
       const testCase = findCase("low-degree polynomial with one round");
       const commitment = structuredClone(testCase.commitment);
-      expect(commitment.foldedQuotient.slice(1)).to.deep.equal([0n, 0n, 0n]);
-      commitment.foldedQuotient = commitment.foldedQuotient.slice(0, 1);
+      expect(commitment.foldedPolynomial.slice(1)).to.deep.equal([0n, 0n, 0n]);
+      commitment.foldedPolynomial = commitment.foldedPolynomial.slice(0, 1);
       await verify(
         structuredClone(testCase.queries[QUERY_INDEX]),
         commitment,
@@ -278,7 +278,7 @@ describe("FRI verifier", function () {
           value,
           testCase.options
         )
-      ).to.be.revertedWithCustomError(harness, "FoldedQuotientMismatch");
+      ).to.be.revertedWithCustomError(harness, "FoldedPolynomialMismatch");
     });
 
     it("rejects swapped partners", async function () {
@@ -339,20 +339,14 @@ describe("FRI verifier", function () {
       it("rejects a tampered coset leaf", async function () {
         const query = structuredClone(testCase.queries[QUERY_INDEX]);
         query.folds[0].coset[4] = (query.folds[0].coset[4] + 1n) % P;
-        await expect(verifyCoset(query)).to.be.revertedWithCustomError(
-          harness,
-          "RootHashMismatch"
-        );
+        await expect(verifyCoset(query)).to.be.revertedWithCustomError(harness, "RootHashMismatch");
       });
 
       it("rejects swapped coset leaves", async function () {
         const query = structuredClone(testCase.queries[QUERY_INDEX]);
         const coset = query.folds[0].coset;
         [coset[1], coset[2]] = [coset[2], coset[1]];
-        await expect(verifyCoset(query)).to.be.revertedWithCustomError(
-          harness,
-          "RootHashMismatch"
-        );
+        await expect(verifyCoset(query)).to.be.revertedWithCustomError(harness, "RootHashMismatch");
       });
 
       it("rejects a wrong fold rate", async function () {
@@ -453,12 +447,12 @@ describe("FRI verifier", function () {
         .withArgs(3n, 2n);
     });
 
-    it("rejects a non-canonical coefficient of the folded quotient", async function () {
+    it("rejects a non-canonical coefficient of the folded polynomial", async function () {
       const commitment = honestCommitment();
-      commitment.foldedQuotient[0] += P;
+      commitment.foldedPolynomial[0] += P;
       await expect(verify(honestQuery(), commitment))
         .to.be.revertedWithCustomError(harness, "NonCanonicalScalar")
-        .withArgs(commitment.foldedQuotient[0]);
+        .withArgs(commitment.foldedPolynomial[0]);
     });
   });
 

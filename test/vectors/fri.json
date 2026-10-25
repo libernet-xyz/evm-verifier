@@ -6,7 +6,7 @@
     "foldRate": 1,
     "maxRounds": "18446744073709551615",
     "roots": [],
-    "foldedQuotient": ["0x000000000000000000000000000000000000000000000000000000000000000c"],
+    "foldedPolynomial": ["0x000000000000000000000000000000000000000000000000000000000000000c"],
     "queries": [{}, { "index": "1" }],
     "values": [
       "0x000000000000000000000000000000000000000000000000000000000000000c",
@@ -20,7 +20,7 @@
     "foldRate": 1,
     "maxRounds": "18446744073709551615",
     "roots": [],
-    "foldedQuotient": ["0x0000000000000000000000000000000000000000000000000000000000000022"],
+    "foldedPolynomial": ["0x0000000000000000000000000000000000000000000000000000000000000022"],
     "queries": [{}, { "index": "1" }, { "index": "2" }, { "index": "3" }],
     "values": [
       "0x0000000000000000000000000000000000000000000000000000000000000022",
@@ -36,7 +36,7 @@
     "foldRate": 1,
     "maxRounds": "18446744073709551615",
     "roots": ["0x98aafff975573a040e6dc4de12d56cab330e264132ffc4c05e726883d746ccdf"],
-    "foldedQuotient": ["0x7cf7e65ff9928c5f25139e4a9f4477193b032f3b40be163acd308c086ac923b9"],
+    "foldedPolynomial": ["0x7cf7e65ff9928c5f25139e4a9f4477193b032f3b40be163acd308c086ac923b9"],
     "queries": [
       {
         "folds": [
@@ -100,7 +100,7 @@
     "foldRate": 1,
     "maxRounds": "18446744073709551615",
     "roots": ["0x5c45ae7aa92c033e58ba9a1a486cd37436c1c2f0749d13718383a8b7ea4c1b48"],
-    "foldedQuotient": ["0x6538159224ab4a138721bdd1176c942ebe1d83fcc6b71528f7e7de24b80700a7"],
+    "foldedPolynomial": ["0x6538159224ab4a138721bdd1176c942ebe1d83fcc6b71528f7e7de24b80700a7"],
     "queries": [
       {
         "folds": [
@@ -387,7 +387,7 @@
       "0x86b5eaf1b0db4a7ffedb2cd880f54dd0b59714fb6cda6d7392bec636c165f566",
       "0x809e5e20442953c7a62e7fe47a19e23040d3ca2bafc00bba2e97ba7b278d922a"
     ],
-    "foldedQuotient": ["0x6678d0be9f2061f96935384f25a4441f0690d70f36f5494d39d6e3f992d62543"],
+    "foldedPolynomial": ["0x6678d0be9f2061f96935384f25a4441f0690d70f36f5494d39d6e3f992d62543"],
     "queries": [
       {
         "folds": [
@@ -835,7 +835,7 @@
       "0x3e708444a31aed3a38ef8d8074873506efba437be058889e79b8499095e5eefd",
       "0xbb62bc0c84acc6aa08f2bac9f342426dc3e9c284630031807c3f848f35b15dcc"
     ],
-    "foldedQuotient": ["0x5f39da2f621ee22a45dc105e400ff563f2c6ffaebfae9914734b7aa7f0b2df4f"],
+    "foldedPolynomial": ["0x5f39da2f621ee22a45dc105e400ff563f2c6ffaebfae9914734b7aa7f0b2df4f"],
     "queries": [
       {
         "folds": [
@@ -2099,7 +2099,7 @@
       "0x0e01dd935341b8e54e952ef7650e5268085dc377a5829099c0b2b8a960224df4",
       "0xda5b75f093cb53ff58d95f44543a6f3b905a6cb3e181a85f1a57951067c710df"
     ],
-    "foldedQuotient": ["0x65de95a4b61e063d1bc71131ada957380a7f897ac72c5ec9819a6c254c659943"],
+    "foldedPolynomial": ["0x65de95a4b61e063d1bc71131ada957380a7f897ac72c5ec9819a6c254c659943"],
     "queries": [
       {
         "folds": [
@@ -3364,7 +3364,7 @@
       "0x401bf88e57d66297639a6baf78bde5de63f7f7e1d0abf9d7c89e5e3a2ffa6a13",
       "0x94254f6bb4f2efd97d02e2676a2b9854436e0fd6299dd91e459eca7a63679eea"
     ],
-    "foldedQuotient": ["0x74443a22e375e7ff0b3cc071f5ab06bcd203df67883b04d1cb46ab300158ab75"],
+    "foldedPolynomial": ["0x74443a22e375e7ff0b3cc071f5ab06bcd203df67883b04d1cb46ab300158ab75"],
     "queries": [
       {
         "folds": [
@@ -4852,7 +4852,7 @@
       "0x8b1a60ba0fbc04828746c22bc31f567461b77da1e691635f1636419a26bd80b6",
       "0xd978ff74f83ba1959095eef6563afeb799bbd1d108e82f7b0f4a1522c8760e25"
     ],
-    "foldedQuotient": ["0x676c76016291e87f9907b4c9b9066943bb3e6ec99feb187cb4d4fb5ad4cfefa4"],
+    "foldedPolynomial": ["0x676c76016291e87f9907b4c9b9066943bb3e6ec99feb187cb4d4fb5ad4cfefa4"],
     "queries": [
       {
         "folds": [
@@ -5408,7 +5408,7 @@
     "foldRate": 2,
     "maxRounds": "18446744073709551615",
     "roots": ["0xf62fdcf4604e703d26974310d70bca5ef93f22d316f2083167b3bc4fd4437f8f"],
-    "foldedQuotient": [
+    "foldedPolynomial": [
       "0x34da8614b0f50cfe28a1e96719f05dc4dc18e7201e5dd32b93a2b782cf6ac201",
       "0x3f55dd48fe5538bcc9f934e9a33f8bd484e3cd7d34744ac08f266d262146df7f"
     ],
@@ -6034,7 +6034,7 @@
       "0xbfe10adff73937bc2bdab80c2eb931665d85f2d001e45d08918fd1970329b49e",
       "0xc09c34ccf0a8cd76a670c1978050d2d72db0cbc6b13befc20d52a7c89d0bac9c"
     ],
-    "foldedQuotient": ["0x1e131df15def1f5e5ecb3d1890550a98bd0b775cb9d06be227b7f19d11cbcca2"],
+    "foldedPolynomial": ["0x1e131df15def1f5e5ecb3d1890550a98bd0b775cb9d06be227b7f19d11cbcca2"],
     "queries": [
       {
         "folds": [
@@ -8094,7 +8094,7 @@
     "foldRate": 3,
     "maxRounds": "18446744073709551615",
     "roots": ["0xbfe10adff73937bc2bdab80c2eb931665d85f2d001e45d08918fd1970329b49e"],
-    "foldedQuotient": [
+    "foldedPolynomial": [
       "0x6b19fc68c77788c1121d227e82d2cd8ad454150821d60b450e0bdfc2810800d1",
       "0x2b39b7c25d79ff5f87c280cb7ba5b6543c4ddfd1091c3e0dac724cde8ea0aebd"
     ],
@@ -9581,7 +9581,7 @@
     "foldRate": 1,
     "maxRounds": "1",
     "roots": ["0xf62fdcf4604e703d26974310d70bca5ef93f22d316f2083167b3bc4fd4437f8f"],
-    "foldedQuotient": [
+    "foldedPolynomial": [
       "0x1c7f11b5aab72663576b493b95048e8d6dc05332911790c251dcfcc295d40566",
       "0x443b8e49b780a8b9ff2749fedb14685e1a6e9e9d83719729fcbe826adc61ed0e",
       "0x066ee82f37eed7b7adf992c085b0f3e409fccd8c462f7374737a445fed2aa534",
@@ -10174,7 +10174,7 @@
     "foldRate": 1,
     "maxRounds": "0",
     "roots": [],
-    "foldedQuotient": [
+    "foldedPolynomial": [
       "0x000000000000000000000000000000000000000000000000000000000000000c",
       "0x00000000000000000000000000000000000000000000000000000000000000aa",
       "0x0000000000000000000000000000000000000000000000000000000000000578",
@@ -10260,7 +10260,7 @@
     "foldRate": 1,
     "maxRounds": "1",
     "roots": ["0x7d4ab7c010c9d7c75aadabe96fdfd0ad4929f06c7e7d6f6fee6e3e837cd9da28"],
-    "foldedQuotient": [
+    "foldedPolynomial": [
       "0x676c76016291e87f9907b4c9b9066943bb3e6ec99feb187cb4d4fb5ad4cfefa4",
       "0x0000000000000000000000000000000000000000000000000000000000000000",
       "0x0000000000000000000000000000000000000000000000000000000000000000",

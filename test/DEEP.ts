@@ -95,6 +95,8 @@ describe("DEEP verifier", function () {
       [6n, 20n, 18n],
       [4n, 128n, 1n],
       [4n, 256n, 1n],
+      [4n, 257n, 1n],
+      [4n, ethers.MaxUint256, 1n],
     ];
     for (const [blowupLog2, grindingBits, expected] of cases) {
       it(`numQueries(${blowupLog2}, ${grindingBits}) = ${expected}`, async function () {
@@ -126,6 +128,7 @@ describe("DEEP verifier", function () {
       [ethers.zeroPadValue("0x01", 32), 256n, false],
       [ethers.ZeroHash, 256n, true],
       [ethers.ZeroHash, 257n, false],
+      [ethers.ZeroHash, ethers.MaxUint256, false],
     ];
     for (const [hash, grindingBits, expected] of cases) {
       const prefix = hash.slice(0, 10);
@@ -319,9 +322,10 @@ describe("DEEP verifier", function () {
     it("rejects overstated grinding", async function () {
       const proof = structuredClone(ground.proof);
       proof.options.grindingBits = 127n;
-      await expect(
-        verify(proof, structuredClone(ground.commitment))
-      ).to.be.revertedWithCustomError(harness, "InsufficientProofOfWork");
+      await expect(verify(proof, structuredClone(ground.commitment))).to.be.revertedWithCustomError(
+        harness,
+        "InsufficientProofOfWork"
+      );
     });
 
     it("rejects understated grinding", async function () {
@@ -335,7 +339,7 @@ describe("DEEP verifier", function () {
     it("rejects a tampered folded quotient without rounds", async function () {
       const testCase = findCase("zero rounds");
       const proof = structuredClone(testCase.proof);
-      proof.friCommitment.foldedQuotient[1] = (proof.friCommitment.foldedQuotient[1] + 1n) % P;
+      proof.friCommitment.foldedPolynomial[1] = (proof.friCommitment.foldedPolynomial[1] + 1n) % P;
       await expect(
         verify(proof, structuredClone(testCase.commitment))
       ).to.be.revertedWithCustomError(harness, "WrongQueryIndex");
@@ -384,12 +388,20 @@ describe("DEEP verifier", function () {
       await expect(verify(proof)).to.be.revertedWithCustomError(harness, "DomainTooLarge");
     });
 
-    it("rejects excessive grinding", async function () {
+    it("rejects unsatisfiable grinding", async function () {
       const proof = structuredClone(ground.proof);
-      proof.options.grindingBits = 128n;
+      proof.options.grindingBits = 257n;
       await expect(verify(proof, structuredClone(ground.commitment)))
         .to.be.revertedWithCustomError(harness, "InvalidGrindingBits")
-        .withArgs(128n);
+        .withArgs(257n);
+    });
+
+    it("rejects the maximum number of grinding bits", async function () {
+      const proof = structuredClone(ground.proof);
+      proof.options.grindingBits = ethers.MaxUint256;
+      await expect(verify(proof, structuredClone(ground.commitment)))
+        .to.be.revertedWithCustomError(harness, "InvalidGrindingBits")
+        .withArgs(ethers.MaxUint256);
     });
 
     it("rejects a commitment without batches", async function () {
@@ -417,10 +429,10 @@ describe("DEEP verifier", function () {
 
     it("rejects a non-canonical coefficient of the folded quotient", async function () {
       const proof = sampleProof();
-      proof.friCommitment.foldedQuotient[0] += P;
+      proof.friCommitment.foldedPolynomial[0] += P;
       await expect(verify(proof))
         .to.be.revertedWithCustomError(harness, "NonCanonicalScalar")
-        .withArgs(proof.friCommitment.foldedQuotient[0]);
+        .withArgs(proof.friCommitment.foldedPolynomial[0]);
     });
 
     it("rejects a non-canonical leaf value", async function () {

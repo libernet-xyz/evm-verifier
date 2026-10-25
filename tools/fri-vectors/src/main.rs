@@ -41,8 +41,8 @@ struct TestCase {
     max_rounds: String,
     /// The roots of the FRI commitment, as 0x-prefixed hex strings.
     roots: Vec<String>,
-    /// The coefficients of the folded quotient, as 0x-prefixed hex strings.
-    folded_quotient: Vec<String>,
+    /// The coefficients of the folded polynomial, as 0x-prefixed hex strings.
+    folded_polynomial: Vec<String>,
     queries: Vec<proto::Query>,
     /// The evaluations of the committed polynomial at the queried elements, as 0x-prefixed hex
     /// strings. There's one for every query.
@@ -105,8 +105,8 @@ impl TestCase {
                 .iter()
                 .map(|root| format!("{root:?}"))
                 .collect(),
-            folded_quotient: commitment
-                .folded_quotient()
+            folded_polynomial: commitment
+                .folded_polynomial()
                 .coefficients()
                 .iter()
                 .map(Scalar::to_string)
@@ -221,7 +221,7 @@ fn main() {
             1,
             0,
         ),
-        // The folded quotient has 4 coefficients, of which only the first is non-zero.
+        // The folded polynomial has 4 coefficients, of which only the first is non-zero.
         TestCase::new("low-degree polynomial with one round", &[5, 6], 8, 1, 1, 1),
     ];
     println!("{}", serde_json::to_string(&cases).unwrap());

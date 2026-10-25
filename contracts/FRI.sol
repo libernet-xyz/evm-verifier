@@ -31,7 +31,7 @@ struct FriCommitment {
     /// @dev The coefficients of the polynomial resulting from the last round, in ascending degree
     ///   order, each in [0, P). They're the coefficients of the domain-shifted polynomial, so they
     ///   are evaluated at the roots of unity of the folded domain.
-    uint256[] foldedQuotient;
+    uint256[] foldedPolynomial;
 }
 
 /// @notice A Merkle proof for a coset of FRI leaves.
@@ -95,8 +95,8 @@ library FriVerifier {
     /// @dev Reverted when the number of commitment roots differs from the number of rounds.
     error WrongNumberOfFoldingRounds();
 
-    /// @dev Reverted when the folded quotient has more coefficients than the rounds allow.
-    error InvalidFoldedQuotientSize(uint256 got, uint256 maximum);
+    /// @dev Reverted when the folded polynomial has more coefficients than the rounds allow.
+    error InvalidFoldedPolynomialSize(uint256 got, uint256 maximum);
 
     /// @dev Reverted when a Merkle path has the wrong height.
     error InvalidProofHeight(uint256 got, uint256 want);
@@ -106,8 +106,8 @@ library FriVerifier {
     ///   the previous round.
     error LeafValueMismatch();
 
-    /// @dev Reverted when the result of the last round differs from the folded quotient.
-    error FoldedQuotientMismatch();
+    /// @dev Reverted when the result of the last round differs from the folded polynomial.
+    error FoldedPolynomialMismatch();
 
     /// @dev Domain separator for the folding challenges: `SHA3-256("starkom/fri/fold")`.
     bytes32 constant FOLD_DST =
@@ -135,13 +135,13 @@ library FriVerifier {
         return Keccak256Hash.challenge(FOLD_DST, transcript);
     }
 
-    /// @notice Checks that all the coefficients of the folded quotient of a commitment are
+    /// @notice Checks that all the coefficients of the folded polynomial of a commitment are
     ///   canonical field elements, reverting otherwise.
     /// @dev Performs the checks of `Proof::from_proto` on the FRI commitment. Callers must invoke
     ///   it once per commitment, before verifying its queries with `verifyQuery`. Hashes can't be
     ///   out of range with the Keccak-256 backend.
     function validateCommitment(FriCommitment memory commitment) internal pure {
-        uint256[] memory coefficients = commitment.foldedQuotient;
+        uint256[] memory coefficients = commitment.foldedPolynomial;
         for (uint256 i = 0; i < coefficients.length; i++) {
             _checkCanonical(coefficients[i]);
         }
@@ -154,7 +154,7 @@ library FriVerifier {
     ///   Every round checks that the opened coset contains the expected evaluation at the queried
     ///   index, checks the coset against the Merkle root of the round, and folds it to get the
     ///   expected evaluation of the next round. The result of the last round, or `value` itself if
-    ///   there are zero rounds, must match the evaluation of the folded quotient.
+    ///   there are zero rounds, must match the evaluation of the folded polynomial.
     ///
     ///   The position of the opened coset is bit-reversed only once: the next round opens the
     ///   folded evaluation at `index mod 2^(k-r)`, whose position `reverseBits(index, k) >> r` is
@@ -193,11 +193,11 @@ library FriVerifier {
                 position >>= foldRate;
             }
         }
-        // `evaluate_on_two_adic_domain`: the folded quotient is evaluated at omega^index, with
+        // `evaluate_on_two_adic_domain`: the folded polynomial is evaluated at omega^index, with
         // omega being the primitive 2^k-th root of unity.
         uint256 x = BlueSky.ROOT_OF_UNITY.pow(index << (BlueSky.S - k));
-        if (_evaluate(commitment.foldedQuotient, x) != value) {
-            revert FoldedQuotientMismatch();
+        if (_evaluate(commitment.foldedPolynomial, x) != value) {
+            revert FoldedPolynomialMismatch();
         }
     }
 
@@ -259,8 +259,11 @@ library FriVerifier {
             revert WrongNumberOfFoldingRounds();
         }
         uint256 maximum = degreeBound >> (rounds * options.foldRate);
-        if (commitment.foldedQuotient.length > maximum) {
-            revert InvalidFoldedQuotientSize(commitment.foldedQuotient.length, maximum);
+        if (commitment.foldedPolynomial.length > maximum) {
+            revert InvalidFoldedPolynomialSize(
+                commitment.foldedPolynomial.length,
+                maximum
+            );
         }
     }
 
@@ -293,12 +296,25 @@ library FriVerifier {
         if (coset[position & (coset.length - 1)] != value) {
             revert LeafValueMismatch();
         }
-        Merkle.verifyPath(_cosetRoot(coset), proof.path, position >> foldRate, rootHash);
+        Merkle.verifyPath(
+            _cosetRoot(coset),
+            proof.path,
+            position >> foldRate,
+            rootHash
+        );
         // omega^(-baseIndex), with omega being the primitive 2^k-th root of unity and `baseIndex`
         // the smallest index of the coset.
         uint256 baseIndex = index & ((1 << (k - foldRate)) - 1);
-        uint256 xInverse = BlueSky.ROOT_OF_UNITY_INV.pow(baseIndex << (BlueSky.S - k));
-        return _foldCoset(coset, xInverse, rootsInverse, foldingChallenge(rootHash));
+        uint256 xInverse = BlueSky.ROOT_OF_UNITY_INV.pow(
+            baseIndex << (BlueSky.S - k)
+        );
+        return
+            _foldCoset(
+                coset,
+                xInverse,
+                rootsInverse,
+                foldingChallenge(rootHash)
+            );
     }
 
     /// @dev Returns the root of the Merkle subtree whose leaves are the given coset, matching
@@ -312,7 +328,10 @@ library FriVerifier {
         while (size > 1) {
             size /= 2;
             for (uint256 i = 0; i < size; i++) {
-                nodes[i] = Keccak256Hash.hashBinary(nodes[2 * i], nodes[2 * i + 1]);
+                nodes[i] = Keccak256Hash.hashBinary(
+                    nodes[2 * i],
+                    nodes[2 * i + 1]
+                );
             }
         }
         return nodes[0];
@@ -325,7 +344,9 @@ library FriVerifier {
     ) private view returns (uint256[] memory roots) {
         uint256 size = 1 << foldRate;
         roots = new uint256[](size);
-        uint256 generator = BlueSky.ROOT_OF_UNITY_INV.pow(1 << (BlueSky.S - foldRate));
+        uint256 generator = BlueSky.ROOT_OF_UNITY_INV.pow(
+            1 << (BlueSky.S - foldRate)
+        );
         uint256 power = BlueSky.ONE;
         for (uint256 j = 0; j < size; j++) {
             roots[j] = power;

@@ -18,7 +18,8 @@ struct DeepOptions {
     uint256 foldRate;
     /// @dev The maximum number of FRI folding rounds.
     uint256 maxRounds;
-    /// @dev The number of grinding bits, at most half the number of bits of the field.
+    /// @dev The number of grinding bits, at most 256 (the number of bits of the proof-of-work
+    ///   hash).
     uint256 grindingBits;
 }
 
@@ -81,11 +82,12 @@ struct DeepProof {
 library DeepVerifier {
     using BlueSky for uint256;
 
-    /// @dev Reverted when the number of grinding bits exceeds half the number of bits of the field.
-    error InvalidGrindingBits(uint256 grindingBits);
-
     /// @dev Reverted when the commitment has no polynomial batches.
     error NoBatches();
+
+    /// @dev Reverted when the number of grinding bits exceeds the number of bits of the
+    ///   proof-of-work hash, because no hash can satisfy it.
+    error InvalidGrindingBits(uint256 grindingBits);
 
     /// @dev Reverted when the number of polynomials of the proof differs from the commitment's.
     error InvalidNumberOfPolynomials(uint256 got, uint256 want);
@@ -128,8 +130,9 @@ library DeepVerifier {
     /// @dev Target security level in bits. Matches `deep::LAMBDA`.
     uint256 constant LAMBDA = 128;
 
-    /// @dev Maximum number of grinding bits: half the number of bits of BlueSky (255).
-    uint256 constant MAX_GRINDING_BITS = 127;
+    /// @dev The number of bits of a proof-of-work hash, which is the maximum number of grinding
+    ///   bits. Matches `deep::PROOF_OF_WORK_BITS`.
+    uint256 constant PROOF_OF_WORK_BITS = 256;
 
     /// @dev Domain separator of the query seed: `SHA3-256("starkom/deep/query/0")`.
     bytes32 constant QUERY_DST0 =
@@ -232,7 +235,7 @@ library DeepVerifier {
         FriCommitment memory friCommitment
     ) internal pure returns (bytes32) {
         bytes32[] memory roots = friCommitment.roots;
-        uint256[] memory coefficients = friCommitment.foldedQuotient;
+        uint256[] memory coefficients = friCommitment.foldedPolynomial;
         uint256 length = transcript.length +
             2 +
             roots.length +
@@ -375,7 +378,7 @@ library DeepVerifier {
                 options.blowupLog2
             );
         }
-        if (options.grindingBits > MAX_GRINDING_BITS) {
+        if (options.grindingBits > PROOF_OF_WORK_BITS) {
             revert InvalidGrindingBits(options.grindingBits);
         }
         return degreeBoundLog2 + options.blowupLog2;
