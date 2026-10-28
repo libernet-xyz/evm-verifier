@@ -6,13 +6,14 @@ import "../DEEP.sol";
 /// @dev Thin wrapper exposing DeepVerifier internals for testing.
 contract DeepHarness {
     function domainSeparators() external pure returns (bytes32[5] memory) {
-        return [
-            DeepVerifier.QUERY_DST0,
-            DeepVerifier.QUERY_DST1,
-            DeepVerifier.RLC_DST,
-            DeepVerifier.QUOTIENT_DST,
-            DeepVerifier.POW_DST
-        ];
+        return
+            [
+                DeepVerifier.QUERY_DST0,
+                DeepVerifier.QUERY_DST1,
+                DeepVerifier.RLC_DST,
+                DeepVerifier.QUOTIENT_DST,
+                DeepVerifier.POW_DST
+            ];
     }
 
     function numQueries(
@@ -35,9 +36,10 @@ contract DeepHarness {
         uint256 numPolys,
         DeepPoint[] calldata points
     ) external pure returns (uint256 alpha, uint256 beta) {
-        return DeepVerifier.deepChallenges(
-            DeepVerifier.deepTranscript(commitment, numPolys, points)
-        );
+        return
+            DeepVerifier.deepChallenges(
+                DeepVerifier.deepTranscript(commitment, numPolys, points)
+            );
     }
 
     function querySeed(
@@ -46,13 +48,17 @@ contract DeepHarness {
         DeepPoint[] calldata points,
         FriCommitment calldata friCommitment
     ) external pure returns (bytes32) {
-        return DeepVerifier.querySeed(
-            DeepVerifier.deepTranscript(commitment, numPolys, points),
-            friCommitment
-        );
+        return
+            DeepVerifier.querySeed(
+                DeepVerifier.deepTranscript(commitment, numPolys, points),
+                friCommitment
+            );
     }
 
-    function proofOfWork(bytes32 seed, uint64 nonce) external pure returns (bytes32) {
+    function proofOfWork(
+        bytes32 seed,
+        uint64 nonce
+    ) external pure returns (bytes32) {
         return DeepVerifier.proofOfWork(seed, nonce);
     }
 
@@ -73,8 +79,12 @@ contract DeepHarness {
 
     function verify(
         DeepCommitment calldata commitment,
-        DeepProof calldata proof
-    ) external view {
-        DeepVerifier.verify(commitment, proof);
+        bytes calldata proof
+    )
+        external
+        view
+        returns (DeepOptions memory options, DeepPoint[] memory points)
+    {
+        return DeepVerifier.verify(commitment, proof);
     }
 }

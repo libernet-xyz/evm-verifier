@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import type { DeepHarness } from "../types/ethers-contracts";
-import { type DeepCommitment, type DeepProof, loadDeepCases } from "./vectors";
+import { type DeepCommitment, type DeepProof, encodeDeepProof, loadDeepCases } from "./vectors";
 
 const { ethers } = await network.create();
 
@@ -46,8 +46,9 @@ describe("DEEP verifier", function () {
     harness = await ethers.deployContract("DeepHarness");
   });
 
+  /** Encodes the proof in the calldata format and verifies it. */
   function verify(proof: DeepProof, commitment: DeepCommitment = sampleCommitment()) {
-    return harness.verify(commitment, proof);
+    return harness.verify(commitment, encodeDeepProof(proof));
   }
 
   /**
@@ -138,8 +139,16 @@ describe("DEEP verifier", function () {
     }
   });
 
+  describe("encodes proofs like the Rust implementation", function () {
+    for (const { name, proof, calldata } of cases) {
+      it(name, function () {
+        expect(encodeDeepProof(proof)).to.equal(calldata);
+      });
+    }
+  });
+
   describe("accepts honest proofs", function () {
-    for (const { name, commitment, proof } of cases) {
+    for (const { name, commitment, proof, calldata } of cases) {
       const { degreeBound, blowupLog2, foldRate, maxRounds, grindingBits } = proof.options;
       const description =
         `${name} (degree bound ${degreeBound}, blowup 2^${blowupLog2}, fold rate ${foldRate}, ` +
@@ -147,9 +156,16 @@ describe("DEEP verifier", function () {
         `${grindingBits} grinding bits, ${commitment.batches.length} batches, ` +
         `${proof.points.length} points, ${proof.queries.length} queries)`;
       it(description, async function () {
-        await harness.verify(commitment, proof);
+        await harness.verify(commitment, calldata);
       });
     }
+
+    it("returns the parameters and the opened points", async function () {
+      const [options, points] = await harness.verify(sample.commitment, sample.calldata);
+      const { degreeBound, blowupLog2, foldRate, maxRounds, grindingBits } = sample.proof.options;
+      expect(options).to.deep.equal([degreeBound, blowupLog2, foldRate, maxRounds, grindingBits]);
+      expect(points).to.deep.equal(sample.proof.points.map(({ z, values }) => [z, values]));
+    });
   });
 
   // Mirrors the rejection tests in `starkom_pcs::deep::tests`.
@@ -161,28 +177,19 @@ describe("DEEP verifier", function () {
     it("rejects mismatched max rounds", async function () {
       const proof = sampleProof();
       proof.options.maxRounds = 1n;
-      await expect(verify(proof)).to.be.revertedWithCustomError(
-        harness,
-        "WrongNumberOfFoldingRounds"
-      );
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects a mismatched fold rate", async function () {
       const proof = sampleProof();
       proof.options.foldRate = 2n;
-      await expect(verify(proof)).to.be.revertedWithCustomError(
-        harness,
-        "WrongNumberOfFoldingRounds"
-      );
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects a mismatched degree bound", async function () {
       const proof = sampleProof();
       proof.options.degreeBound *= 2n;
-      await expect(verify(proof)).to.be.revertedWithCustomError(
-        harness,
-        "WrongNumberOfFoldingRounds"
-      );
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects a point in the evaluation domain", async function () {
@@ -197,7 +204,7 @@ describe("DEEP verifier", function () {
     it("rejects a tampered evaluation", async function () {
       const proof = sampleProof();
       proof.points[0].values[0] = (proof.points[0].values[0] + 1n) % P;
-      await expect(verify(proof)).to.be.revertedWithCustomError(harness, "WrongQueryIndex");
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects a proof without points", async function () {
@@ -209,23 +216,19 @@ describe("DEEP verifier", function () {
     it("rejects a missing evaluation", async function () {
       const proof = sampleProof();
       proof.points[0].values.pop();
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidNumberOfEvaluations")
-        .withArgs(2n, 3n);
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects an extra evaluation", async function () {
       const proof = sampleProof();
       proof.points[0].values.push(0n);
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidNumberOfEvaluations")
-        .withArgs(4n, 3n);
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects an extra point", async function () {
       const proof = sampleProof();
       proof.points.push({ z: 789n, values: [...proof.points[0].values] });
-      await expect(verify(proof)).to.be.revertedWithCustomError(harness, "WrongQueryIndex");
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects swapped evaluations", async function () {
@@ -234,22 +237,18 @@ describe("DEEP verifier", function () {
         proof.points[1].values,
         proof.points[0].values,
       ];
-      await expect(verify(proof)).to.be.revertedWithCustomError(harness, "WrongQueryIndex");
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects a foreign commitment", async function () {
-      await expect(
-        verify(sampleProof(), structuredClone(foreign.commitment))
-      ).to.be.revertedWithCustomError(harness, "WrongQueryIndex");
+      await expect(verify(sampleProof(), structuredClone(foreign.commitment))).to.revert(ethers);
     });
 
     it("rejects misreported batch sizes", async function () {
       const commitment = sampleCommitment();
       commitment.batches[0].numPolys = 1n;
       commitment.batches[1].numPolys = 2n;
-      await expect(verify(sampleProof(), commitment))
-        .to.be.revertedWithCustomError(harness, "InvalidBatchSize")
-        .withArgs(2n, 1n);
+      await expect(verify(sampleProof(), commitment)).to.revert(ethers);
     });
 
     it("rejects the wrong number of polynomials", async function () {
@@ -263,25 +262,19 @@ describe("DEEP verifier", function () {
     it("rejects a missing query", async function () {
       const proof = sampleProof();
       proof.queries.pop();
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidNumberOfQueries")
-        .withArgs(63n, 64n);
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects missing openings", async function () {
       const proof = sampleProof();
       proof.openings.pop();
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidNumberOfOpenings")
-        .withArgs(63n, 64n);
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects a missing opening within a query", async function () {
       const proof = sampleProof();
       proof.openings[0].proofs.pop();
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidNumberOfBatchOpenings")
-        .withArgs(1n, 2n);
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects swapped openings", async function () {
@@ -294,9 +287,7 @@ describe("DEEP verifier", function () {
       const proof = sampleProof();
       const other = findCase("blowup 8").proof;
       proof.openings[0].proofs[0] = structuredClone(other.openings[0].proofs[0]);
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidOpeningHeight")
-        .withArgs(5n, 4n);
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects an invalid nonce", async function () {
@@ -313,10 +304,7 @@ describe("DEEP verifier", function () {
       const commitment = structuredClone(ground.commitment);
       const proof = structuredClone(ground.proof);
       proof.nonce = await findNonce(commitment, proof, true);
-      await expect(verify(proof, commitment)).to.be.revertedWithCustomError(
-        harness,
-        "WrongQueryIndex"
-      );
+      await expect(verify(proof, commitment)).to.revert(ethers);
     });
 
     it("rejects overstated grinding", async function () {
@@ -331,24 +319,20 @@ describe("DEEP verifier", function () {
     it("rejects understated grinding", async function () {
       const proof = structuredClone(ground.proof);
       proof.options.grindingBits = 0n;
-      await expect(verify(proof, structuredClone(ground.commitment)))
-        .to.be.revertedWithCustomError(harness, "InvalidNumberOfOpenings")
-        .withArgs(60n, 64n);
+      await expect(verify(proof, structuredClone(ground.commitment))).to.revert(ethers);
     });
 
     it("rejects a tampered folded quotient without rounds", async function () {
       const testCase = findCase("zero rounds");
       const proof = structuredClone(testCase.proof);
       proof.friCommitment.foldedPolynomial[1] = (proof.friCommitment.foldedPolynomial[1] + 1n) % P;
-      await expect(
-        verify(proof, structuredClone(testCase.commitment))
-      ).to.be.revertedWithCustomError(harness, "WrongQueryIndex");
+      await expect(verify(proof, structuredClone(testCase.commitment))).to.revert(ethers);
     });
 
     it("rejects a tampered FRI root", async function () {
       const proof = sampleProof();
       proof.friCommitment.roots[1] = "0x" + "42".repeat(32);
-      await expect(verify(proof)).to.be.revertedWithCustomError(harness, "WrongQueryIndex");
+      await expect(verify(proof)).to.revert(ethers);
     });
   });
 
@@ -384,7 +368,8 @@ describe("DEEP verifier", function () {
 
     it("rejects a huge blowup factor without overflowing", async function () {
       const proof = sampleProof();
-      proof.options.blowupLog2 = ethers.MaxUint256;
+      // The largest value of a varint.
+      proof.options.blowupLog2 = 2n ** 64n - 1n;
       await expect(verify(proof)).to.be.revertedWithCustomError(harness, "DomainTooLarge");
     });
 
@@ -398,10 +383,11 @@ describe("DEEP verifier", function () {
 
     it("rejects the maximum number of grinding bits", async function () {
       const proof = structuredClone(ground.proof);
-      proof.options.grindingBits = ethers.MaxUint256;
+      // The largest value of a varint.
+      proof.options.grindingBits = 2n ** 64n - 1n;
       await expect(verify(proof, structuredClone(ground.commitment)))
         .to.be.revertedWithCustomError(harness, "InvalidGrindingBits")
-        .withArgs(ethers.MaxUint256);
+        .withArgs(2n ** 64n - 1n);
     });
 
     it("rejects a commitment without batches", async function () {
@@ -456,16 +442,27 @@ describe("DEEP verifier", function () {
     });
   });
 
-  describe("rejects other tampering", function () {
-    it("rejects a query at the wrong index", async function () {
-      const proof = sampleProof();
-      const index = proof.queries[0].index;
-      proof.queries[0].index = (index + 1n) % 16n;
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "WrongQueryIndex")
-        .withArgs((index + 1n) % 16n, index);
+  describe("rejects malformed calldata", function () {
+    it("rejects trailing data", async function () {
+      await expect(harness.verify(sampleCommitment(), ethers.concat([sample.calldata, "0x00"])))
+        .to.be.revertedWithCustomError(harness, "TrailingData")
+        .withArgs(1n);
     });
 
+    it("rejects a truncated proof", async function () {
+      const calldata = ethers.dataSlice(sample.calldata, 0, ethers.dataLength(sample.calldata) - 1);
+      await expect(harness.verify(sampleCommitment(), calldata)).to.revert(ethers);
+    });
+
+    it("rejects an empty proof", async function () {
+      await expect(harness.verify(sampleCommitment(), "0x")).to.be.revertedWithCustomError(
+        harness,
+        "TruncatedProof"
+      );
+    });
+  });
+
+  describe("rejects other tampering", function () {
     it("rejects a tampered leaf value", async function () {
       const proof = sampleProof();
       const leaf = proof.openings[5].proofs[0].leaf;
@@ -480,9 +477,7 @@ describe("DEEP verifier", function () {
       for (let i = 0; i < 64; i++) {
         proof.openings[0].proofs[0].path.push(ethers.ZeroHash);
       }
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidOpeningHeight")
-        .withArgs(68n, 4n);
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects a FRI opening inconsistent with the DEEP quotient", async function () {

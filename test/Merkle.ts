@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import type { MerkleHarness } from "../types/ethers-contracts";
-import { loadFriCases } from "./vectors";
+import { encodeMerklePath, loadFriCases } from "./vectors";
 
 const { ethers } = await network.create();
 
@@ -79,6 +79,21 @@ describe("Merkle", function () {
     harness = await ethers.deployContract("MerkleHarness");
   });
 
+  /** Verifies a Merkle proof, passing the path in the calldata format. */
+  function verify(
+    proof: { leaf: bigint[]; path: string[] },
+    index: number,
+    rootHash: string,
+    height: number = proof.path.length
+  ) {
+    return harness.verify(proof.leaf, encodeMerklePath(proof.path), height, index, rootHash);
+  }
+
+  /** Verifies a Merkle path, passing it in the calldata format. */
+  function verifyPath(leaf: string, path: string[], index: bigint | number, rootHash: string) {
+    return harness.verifyPath(leaf, encodeMerklePath(path), path.length, index, rootHash);
+  }
+
   describe("LEAF_DST", function () {
     // From `starkom_pcs::merkle::tests::test_dsts`.
     it("matches the Rust implementation", async function () {
@@ -113,42 +128,20 @@ describe("Merkle", function () {
     });
   });
 
-  describe("validate", function () {
-    it("accepts canonical values", async function () {
-      await harness.validate({ leaf: [0n, 1n, P - 1n], path: [] });
-    });
-
-    it("accepts an empty leaf", async function () {
-      await harness.validate({ leaf: [], path: [] });
-    });
-
-    it("rejects P", async function () {
-      await expect(harness.validate({ leaf: [1n, P], path: [] }))
-        .to.be.revertedWithCustomError(harness, "NonCanonicalScalar")
-        .withArgs(P);
-    });
-
-    it("rejects 2^256 - 1", async function () {
-      await expect(
-        harness.validate({ leaf: [ethers.MaxUint256], path: [] })
-      ).to.be.revertedWithCustomError(harness, "NonCanonicalScalar");
-    });
-  });
-
   describe("verify", function () {
     const index = 3;
     const proof = { leaf: leaves[index], path: merklePath(levels, index) };
 
     it("accepts every leaf", async function () {
       for (let i = 0; i < leaves.length; i++) {
-        await harness.verify({ leaf: leaves[i], path: merklePath(levels, i) }, i, root);
+        await verify({ leaf: leaves[i], path: merklePath(levels, i) }, i, root);
       }
     });
 
     it("rejects a tampered leaf value", async function () {
       const tampered = structuredClone(proof);
       tampered.leaf[0] = (tampered.leaf[0] + 1n) % P;
-      await expect(harness.verify(tampered, index, root)).to.be.revertedWithCustomError(
+      await expect(verify(tampered, index, root)).to.be.revertedWithCustomError(
         harness,
         "RootHashMismatch"
       );
@@ -157,7 +150,7 @@ describe("Merkle", function () {
     it("rejects a missing leaf value", async function () {
       const tampered = structuredClone(proof);
       tampered.leaf.pop();
-      await expect(harness.verify(tampered, index, root)).to.be.revertedWithCustomError(
+      await expect(verify(tampered, index, root)).to.be.revertedWithCustomError(
         harness,
         "RootHashMismatch"
       );
@@ -166,35 +159,47 @@ describe("Merkle", function () {
     it("rejects a tampered path", async function () {
       const tampered = structuredClone(proof);
       tampered.path[2] = ethers.ZeroHash;
-      await expect(harness.verify(tampered, index, root)).to.be.revertedWithCustomError(
+      await expect(verify(tampered, index, root)).to.be.revertedWithCustomError(
         harness,
         "RootHashMismatch"
       );
     });
 
     it("rejects the wrong root", async function () {
-      await expect(harness.verify(proof, index, ethers.ZeroHash)).to.be.revertedWithCustomError(
+      await expect(verify(proof, index, ethers.ZeroHash)).to.be.revertedWithCustomError(
         harness,
         "RootHashMismatch"
       );
     });
 
     it("rejects the wrong index", async function () {
-      await expect(harness.verify(proof, index + 1, root)).to.be.revertedWithCustomError(
+      await expect(verify(proof, index + 1, root)).to.be.revertedWithCustomError(
         harness,
         "RootHashMismatch"
       );
     });
 
     it("rejects an index that doesn't fit in the path", async function () {
-      await expect(
-        harness.verify(proof, index + leaves.length, root)
-      ).to.be.revertedWithCustomError(harness, "InvalidIndex");
+      await expect(verify(proof, index + leaves.length, root)).to.be.revertedWithCustomError(
+        harness,
+        "InvalidIndex"
+      );
+    });
+
+    it("rejects a path shorter than the tree", async function () {
+      await expect(verify(proof, index, root, proof.path.length + 1)).to.revert(ethers);
+    });
+
+    it("rejects a path longer than the tree", async function () {
+      const path = encodeMerklePath([...proof.path, ethers.ZeroHash]);
+      await expect(harness.verify(proof.leaf, path, proof.path.length, index, root))
+        .to.be.revertedWithCustomError(harness, "TrailingData")
+        .withArgs(1n);
     });
 
     it("reports the computed and expected roots", async function () {
       const wrongRoot = ethers.ZeroHash;
-      await expect(harness.verify(proof, index, wrongRoot))
+      await expect(verify(proof, index, wrongRoot))
         .to.be.revertedWithCustomError(harness, "RootHashMismatch")
         .withArgs(root, wrongRoot);
     });
@@ -220,12 +225,7 @@ describe("Merkle", function () {
           let cosetPosition = reverseBits(query.index, k) >> options.foldRate;
           for (let round = 0; round < query.folds.length; round++) {
             const { coset, path } = query.folds[round];
-            await harness.verifyPath(
-              cosetRoot(coset),
-              path,
-              cosetPosition,
-              commitment.roots[round]
-            );
+            await verifyPath(cosetRoot(coset), path, cosetPosition, commitment.roots[round]);
             cosetPosition >>= options.foldRate;
           }
         }
@@ -233,20 +233,20 @@ describe("Merkle", function () {
     });
 
     it("accepts a vector-leaf tree given the leaf hash", async function () {
-      await harness.verifyPath(hashLeaf(leaves[5]), merklePath(levels, 5), 5, root);
+      await verifyPath(hashLeaf(leaves[5]), merklePath(levels, 5), 5, root);
     });
 
     it("accepts an empty path when the leaf is the root", async function () {
-      await harness.verifyPath(pairRoot, [], 0, pairRoot);
+      await verifyPath(pairRoot, [], 0, pairRoot);
     });
 
     it("accepts a FRI pair at its bit-reversed position", async function () {
-      await harness.verifyPath(pairRoot, opening.path, position, honest.commitment.roots[0]);
+      await verifyPath(pairRoot, opening.path, position, honest.commitment.roots[0]);
     });
 
     it("rejects a FRI pair at its natural position", async function () {
       await expect(
-        harness.verifyPath(pairRoot, opening.path, 1, honest.commitment.roots[0])
+        verifyPath(pairRoot, opening.path, 1, honest.commitment.roots[0])
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
@@ -256,7 +256,7 @@ describe("Merkle", function () {
         ethers.toBeHex(opening.coset[1], 32)
       );
       await expect(
-        harness.verifyPath(tampered, opening.path, position, honest.commitment.roots[0])
+        verifyPath(tampered, opening.path, position, honest.commitment.roots[0])
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
@@ -266,13 +266,13 @@ describe("Merkle", function () {
         ethers.toBeHex(opening.coset[0], 32)
       );
       await expect(
-        harness.verifyPath(swapped, opening.path, position, honest.commitment.roots[0])
+        verifyPath(swapped, opening.path, position, honest.commitment.roots[0])
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
     it("rejects an index that doesn't fit in the path", async function () {
       await expect(
-        harness.verifyPath(pairRoot, opening.path, position + 16, honest.commitment.roots[0])
+        verifyPath(pairRoot, opening.path, position + 16, honest.commitment.roots[0])
       ).to.be.revertedWithCustomError(harness, "InvalidIndex");
     });
   });

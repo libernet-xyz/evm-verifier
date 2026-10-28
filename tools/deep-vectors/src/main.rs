@@ -6,7 +6,8 @@
 //!
 //! Every test case contains a commitment and a proof serialized with the canonical proto3 JSON
 //! mapping of the `starkom-pcs` protobufs, so for example `bytes` fields are base64 strings and
-//! `uint64` fields are decimal strings.
+//! `uint64` fields are decimal strings, plus the same proof encoded in the calldata format of the
+//! Solidity verifier (see the `calldata` crate) as a 0x-prefixed hex string.
 //!
 //! Usage: `cargo run --release > ../../test/vectors/deep.json`
 
@@ -54,6 +55,7 @@ struct TestCase {
     name: &'static str,
     commitment: proto::Commitment,
     proof: proto::Proof,
+    calldata: String,
 }
 
 /// Converts a `starkom-pcs` protobuf message to its `serde`-enabled copy through the wire format.
@@ -90,10 +92,18 @@ impl TestCase {
         let decoded_commitment = Commitment::<Scalar, Hash>::from_proto(&commitment_proto).unwrap();
         let decoded_proof = Proof::<Scalar, Hash>::from_proto(&proof_proto).unwrap();
         assert!(decoded_proof.verify(&decoded_commitment).is_ok());
+        let calldata = calldata::encode_proof(&proof_proto).unwrap();
         Self {
             name,
             commitment: convert(&commitment_proto),
             proof: convert(&proof_proto),
+            calldata: format!(
+                "0x{}",
+                calldata
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            ),
         }
     }
 }

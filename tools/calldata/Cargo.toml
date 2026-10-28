@@ -1,0 +1,10 @@
+[package]
+name = "calldata"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+# TODO: switch to the published crate once `starkom-pcs` 9 is released.
+starkom-pcs = { path = "../../../pcs" }

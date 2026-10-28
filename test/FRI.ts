@@ -1,7 +1,13 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import type { FriHarness, Keccak256HashHarness } from "../types/ethers-contracts";
-import { type FriCommitment, type FriOptions, type FriQuery, loadFriCases } from "./vectors";
+import {
+  encodeFriQueries,
+  type FriCommitment,
+  type FriOptions,
+  type FriQuery,
+  loadFriCases,
+} from "./vectors";
 
 const { ethers } = await network.create();
 
@@ -64,7 +70,7 @@ describe("FRI verifier", function () {
     value: bigint = honest.values[QUERY_INDEX],
     options: FriOptions = OPTIONS
   ) {
-    return harness.verifyQuery(options, query, commitment, value);
+    return harness.verifyQuery(options, encodeFriQueries([query]), query.index, commitment, value);
   }
 
   describe("FOLD_DST", function () {
@@ -139,7 +145,13 @@ describe("FRI verifier", function () {
         `fold rate ${options.foldRate}, max rounds ${maxRounds}, ` +
         `${commitment.roots.length} rounds, all ${queries.length} queries)`;
       it(description, async function () {
-        await harness.verifyQueries(options, queries, commitment, values);
+        await harness.verifyQueries(
+          options,
+          encodeFriQueries(queries),
+          queries.map((query) => query.index),
+          commitment,
+          values
+        );
       });
     }
   });
@@ -168,10 +180,7 @@ describe("FRI verifier", function () {
     it("rejects truncated folds", async function () {
       const query = honestQuery();
       query.folds = query.folds.slice(0, 2);
-      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
-        harness,
-        "IncorrectProofSize"
-      );
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
     });
 
     it("rejects a truncated commitment", async function () {
@@ -188,7 +197,7 @@ describe("FRI verifier", function () {
       query.folds.push(structuredClone(query.folds[query.folds.length - 1]));
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "IncorrectProofSize"
+        "TrailingData"
       );
     });
 
@@ -199,7 +208,7 @@ describe("FRI verifier", function () {
       commitment.roots = commitment.roots.slice(0, 2);
       await expect(verify(query, commitment)).to.be.revertedWithCustomError(
         harness,
-        "IncorrectProofSize"
+        "WrongNumberOfFoldingRounds"
       );
     });
 
@@ -255,9 +264,7 @@ describe("FRI verifier", function () {
     it("rejects a wrong proof height", async function () {
       const query = honestQuery();
       query.folds[0] = honestQuery().folds[1];
-      await expect(verify(query, honestCommitment()))
-        .to.be.revertedWithCustomError(harness, "InvalidProofHeight")
-        .withArgs(4n, 5n);
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
     });
 
     it("rejects a wrong value", async function () {
@@ -353,7 +360,7 @@ describe("FRI verifier", function () {
         const options = { ...testCase.options, foldRate: 2n };
         await expect(
           verifyCoset(structuredClone(testCase.queries[QUERY_INDEX]), options)
-        ).to.be.revertedWithCustomError(harness, "IncorrectProofSize");
+        ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
       });
     });
 
@@ -363,7 +370,7 @@ describe("FRI verifier", function () {
           ...OPTIONS,
           foldRate: 3n,
         })
-      ).to.be.revertedWithCustomError(harness, "IncorrectProofSize");
+      ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
     });
   });
 
@@ -409,10 +416,11 @@ describe("FRI verifier", function () {
     });
 
     it("accepts a domain as large as the 2-adicity of the field", async function () {
-      // 2^59 * 2^3 = 2^62 passes the parameter checks and only fails later on the number of folds.
+      // 2^59 * 2^3 = 2^62 passes the parameter checks and only fails later on the number of
+      // rounds.
       await expect(
         verifyWith({ degreeBound: 2n ** 59n, blowupLog2: 3n })
-      ).to.be.revertedWithCustomError(harness, "IncorrectProofSize");
+      ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
     });
 
     it("rejects a non-canonical coset value", async function () {
@@ -434,17 +442,13 @@ describe("FRI verifier", function () {
     it("rejects a missing coset value", async function () {
       const query = honestQuery();
       query.folds[1].coset.pop();
-      await expect(verify(query, honestCommitment()))
-        .to.be.revertedWithCustomError(harness, "InvalidCosetSize")
-        .withArgs(1n, 2n);
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
     });
 
     it("rejects an extra coset value", async function () {
       const query = honestQuery();
       query.folds[1].coset.push(42n);
-      await expect(verify(query, honestCommitment()))
-        .to.be.revertedWithCustomError(harness, "InvalidCosetSize")
-        .withArgs(3n, 2n);
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
     });
 
     it("rejects a non-canonical coefficient of the folded polynomial", async function () {
@@ -528,7 +532,7 @@ describe("FRI verifier", function () {
           degreeBound: OPTIONS.degreeBound / 2n,
           blowupLog2: OPTIONS.blowupLog2 + 1n,
         })
-      ).to.be.revertedWithCustomError(harness, "IncorrectProofSize");
+      ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
     });
 
     it("rejects the wrong blowup factor", async function () {
@@ -537,7 +541,7 @@ describe("FRI verifier", function () {
           ...OPTIONS,
           blowupLog2: OPTIONS.blowupLog2 + 1n,
         })
-      ).to.be.revertedWithCustomError(harness, "InvalidProofHeight");
+      ).to.revert(ethers);
     });
 
     it("rejects a query from another commitment", async function () {

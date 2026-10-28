@@ -3,36 +3,48 @@ pragma solidity ^0.8.28;
 
 import "../Merkle.sol";
 
-/// @dev Thin wrapper exposing Merkle internals for testing.
+/// @dev Thin wrapper exposing Merkle internals for testing. The Merkle paths are passed as proofs
+///   in the calldata format whose heap contains only the pool indices of the sibling hashes.
 contract MerkleHarness {
     function leafDst() external pure returns (uint256) {
         return Merkle.LEAF_DST;
     }
 
-    function validate(LeafProof calldata proof) external pure {
-        Merkle.validate(proof);
-    }
-
     function hashLeaf(
         uint256[] calldata values
     ) external pure returns (bytes32) {
-        return Merkle.hashLeaf(values);
+        uint256 offset;
+        assembly {
+            offset := values.offset
+        }
+        return Merkle.hashLeaf(offset, values.length);
     }
 
     function verify(
-        LeafProof calldata proof,
+        uint256[] calldata leaf,
+        bytes calldata path,
+        uint256 height,
         uint256 index,
         bytes32 rootHash
     ) external pure {
-        Merkle.verify(proof, index, rootHash);
+        uint256 offset;
+        assembly {
+            offset := leaf.offset
+        }
+        ProofViewer memory viewer = ProofViewerMethods.open(path);
+        Merkle.verify(offset, leaf.length, viewer, height, index, rootHash);
+        ProofViewerMethods.close(viewer);
     }
 
     function verifyPath(
         bytes32 leaf,
-        bytes32[] calldata path,
+        bytes calldata path,
+        uint256 height,
         uint256 index,
         bytes32 rootHash
     ) external pure {
-        Merkle.verifyPath(leaf, path, index, rootHash);
+        ProofViewer memory viewer = ProofViewerMethods.open(path);
+        Merkle.verifyPath(leaf, viewer, height, index, rootHash);
+        ProofViewerMethods.close(viewer);
     }
 }
