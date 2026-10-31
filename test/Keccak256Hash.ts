@@ -13,7 +13,7 @@ const TEST_DST = "0x46fced9c25777ff00cbc350056b646bce64bf31b8af5c7cb2c5393f5453e
 function hashTranscript(dst: string, transcript: string[]): string {
   return ethers.solidityPackedKeccak256(
     ["bytes32", "uint128", "bytes32[]"],
-    [dst, transcript.length, transcript]
+    [dst, transcript.length, transcript],
   );
 }
 
@@ -28,19 +28,19 @@ describe("Keccak256Hash", function () {
   describe("hash", function () {
     it("hash([12])", async function () {
       expect(await harness.hash([12n])).to.equal(
-        "0xdf6966c971051c3d54ec59162606531493a51404a002842f56009d7e5cf4a8c7"
+        "0xdf6966c971051c3d54ec59162606531493a51404a002842f56009d7e5cf4a8c7",
       );
     });
 
     it("hash([34, 56])", async function () {
       expect(await harness.hash([34n, 56n])).to.equal(
-        "0x72700d0d963d58363ea77095ddabb7ed1a429a1fe618c8ace040205d52391bb9"
+        "0x72700d0d963d58363ea77095ddabb7ed1a429a1fe618c8ace040205d52391bb9",
       );
     });
 
     it("hash([78, 90, 12])", async function () {
       expect(await harness.hash([78n, 90n, 12n])).to.equal(
-        "0x452eb69ea7065787fb9f51a2894ff6a6ff50ae842aaa68b3ad40ed3580117a8a"
+        "0x452eb69ea7065787fb9f51a2894ff6a6ff50ae842aaa68b3ad40ed3580117a8a",
       );
     });
 
@@ -54,7 +54,7 @@ describe("Keccak256Hash", function () {
     it("first vector", async function () {
       const result = await harness.hashBinary(
         "0x2c8ea861b3ec34715e3d50053d001e9d9929a774954e93ffa1f1784f94339592",
-        "0x57c43629d9178a54c611df8562260309677c1a10a3bd3ca4c9997acbc5f908bb"
+        "0x57c43629d9178a54c611df8562260309677c1a10a3bd3ca4c9997acbc5f908bb",
       );
       expect(result).to.equal("0x0887805e67bb6ece5489f58f1863dffec93f52583cd050eca57c33cbd33abb09");
     });
@@ -62,7 +62,7 @@ describe("Keccak256Hash", function () {
     it("second vector", async function () {
       const result = await harness.hashBinary(
         "0x229045f7089bd1cb6527f1edd7d94a7e91f2dcf607553e2a89fe24d72b2b013c",
-        "0x021905a563d6bf385cb3f2eb4bc69d7750812bcb29542ee4bcfcb0fd0e1bc9b8"
+        "0x021905a563d6bf385cb3f2eb4bc69d7750812bcb29542ee4bcfcb0fd0e1bc9b8",
       );
       expect(result).to.equal("0x3cecf97526033fb79c366cde597b0f66b7774ec26388b71fd591d7275c81dfbe");
     });
@@ -71,7 +71,7 @@ describe("Keccak256Hash", function () {
       const left = ethers.keccak256("0x01");
       const right = ethers.keccak256("0x02");
       expect(await harness.hashBinary(left, right)).to.not.equal(
-        await harness.hashBinary(right, left)
+        await harness.hashBinary(right, left),
       );
     });
   });
@@ -89,7 +89,7 @@ describe("Keccak256Hash", function () {
     for (const transcript of transcripts) {
       it(`agrees with the reference for ${transcript.length} element(s)`, async function () {
         expect(await harness.hashTranscript(TEST_DST, transcript)).to.equal(
-          hashTranscript(TEST_DST, transcript)
+          hashTranscript(TEST_DST, transcript),
         );
       });
     }

@@ -1,7 +1,13 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import type { DeepHarness } from "../types/ethers-contracts";
-import { type DeepCommitment, type DeepProof, encodeDeepProof, loadDeepCases } from "./vectors";
+import {
+  type DeepCommitment,
+  type DeepOptions,
+  type DeepProof,
+  encodeDeepProof,
+  loadDeepCases,
+} from "./vectors";
 
 const { ethers } = await network.create();
 
@@ -34,8 +40,8 @@ function proofOfWork(seed: string, nonce: bigint): bigint {
   return BigInt(
     ethers.solidityPackedKeccak256(
       ["bytes32", "uint128", "bytes32", "uint256"],
-      [POW_DST, 2n, seed, nonce]
-    )
+      [POW_DST, 2n, seed, nonce],
+    ),
   );
 }
 
@@ -60,7 +66,7 @@ describe("DEEP verifier", function () {
       commitment,
       proof.numPolys,
       proof.points,
-      proof.friCommitment
+      proof.friCommitment,
     );
     const bits = proof.options.grindingBits;
     for (let nonce = proof.nonce + 1n; ; nonce++) {
@@ -84,24 +90,88 @@ describe("DEEP verifier", function () {
     });
   });
 
-  // Same cases as `starkom_pcs::deep::tests::test_num_queries_*`.
+  // Same cases as `starkom_pcs::deep::tests::test_num_queries_*`, plus security levels that would
+  // overflow a plain `(bits + blowupLog2 - 1) / blowupLog2`.
   describe("numQueries", function () {
-    const cases: [bigint, bigint, bigint][] = [
-      [1n, 0n, 128n],
-      [4n, 0n, 32n],
-      [6n, 0n, 22n],
-      [4n, 1n, 32n],
-      [4n, 4n, 31n],
-      [4n, 20n, 27n],
-      [6n, 20n, 18n],
-      [4n, 128n, 1n],
-      [4n, 256n, 1n],
-      [4n, 257n, 1n],
-      [4n, ethers.MaxUint256, 1n],
+    const cases: [bigint, bigint, bigint, bigint][] = [
+      [128n, 1n, 0n, 128n],
+      [128n, 4n, 0n, 32n],
+      [128n, 6n, 0n, 22n],
+      [128n, 4n, 1n, 32n],
+      [128n, 4n, 4n, 31n],
+      [128n, 4n, 20n, 27n],
+      [128n, 6n, 20n, 18n],
+      [128n, 4n, 128n, 1n],
+      [128n, 4n, 256n, 1n],
+      [128n, 4n, 257n, 1n],
+      [128n, 4n, ethers.MaxUint256, 1n],
+      [0n, 4n, 0n, 1n],
+      [1n, 4n, 0n, 1n],
+      [64n, 4n, 0n, 16n],
+      [96n, 1n, 26n, 70n],
+      [100n, 3n, 0n, 34n],
+      [256n, 4n, 0n, 64n],
+      [256n, 4n, 20n, 59n],
+      [256n, 8n, 20n, 30n],
+      [256n, 4n, 250n, 2n],
+      [256n, 4n, 256n, 1n],
+      [ethers.MaxUint256, 1n, 0n, ethers.MaxUint256],
+      [ethers.MaxUint256, 4n, 0n, 2n ** 254n],
     ];
-    for (const [blowupLog2, grindingBits, expected] of cases) {
-      it(`numQueries(${blowupLog2}, ${grindingBits}) = ${expected}`, async function () {
-        expect(await harness.numQueries(blowupLog2, grindingBits)).to.equal(expected);
+    for (const [securityBits, blowupLog2, grindingBits, expected] of cases) {
+      const name = `numQueries(${securityBits}, ${blowupLog2}, ${grindingBits}) = ${expected}`;
+      it(name, async function () {
+        expect(await harness.numQueries(securityBits, blowupLog2, grindingBits)).to.equal(expected);
+      });
+    }
+  });
+
+  // Same cases as the `starkom_pcs::deep::tests::test_*_options_*satisfy` tests.
+  describe("satisfies", function () {
+    const expected: DeepOptions = {
+      degreeBound: 4096n,
+      securityBits: 128n,
+      blowupLog2: 6n,
+      foldRate: 3n,
+      maxRounds: 2n,
+      grindingBits: 20n,
+    };
+    const accepted: [string, Partial<DeepOptions>][] = [
+      ["equal options", {}],
+      ["more grinding bits", { grindingBits: 21n }],
+      ["full grinding", { grindingBits: 256n }],
+      ["a higher security level", { securityBits: 256n }],
+    ];
+    for (const [name, changes] of accepted) {
+      it(`accepts ${name}`, async function () {
+        expect(await harness.satisfies({ ...expected, ...changes }, expected)).to.equal(true);
+      });
+    }
+    const rejected: [string, Partial<DeepOptions>][] = [
+      ["fewer grinding bits", { grindingBits: 19n }],
+      ["no grinding", { grindingBits: 0n }],
+      ["a lower security level", { securityBits: 127n }],
+      [
+        "a higher security level with fewer grinding bits",
+        { securityBits: 256n, grindingBits: 19n },
+      ],
+      ["a smaller degree bound", { degreeBound: 2048n }],
+      ["a larger degree bound", { degreeBound: 8192n }],
+      ["a smaller blowup factor", { blowupLog2: 5n }],
+      ["a larger blowup factor", { blowupLog2: 7n }],
+      ["a lower fold rate", { foldRate: 2n }],
+      ["a higher fold rate", { foldRate: 4n }],
+      ["fewer rounds", { maxRounds: 1n }],
+      ["more rounds", { maxRounds: 3n }],
+      ["a larger degree bound with more grinding bits", { degreeBound: 8192n, grindingBits: 21n }],
+      [
+        "a larger degree bound with a higher security level",
+        { degreeBound: 8192n, securityBits: 256n },
+      ],
+    ];
+    for (const [name, changes] of rejected) {
+      it(`rejects ${name}`, async function () {
+        expect(await harness.satisfies({ ...expected, ...changes }, expected)).to.equal(false);
       });
     }
   });
@@ -110,7 +180,7 @@ describe("DEEP verifier", function () {
     // From `starkom_pcs::deep::tests::test_proof_of_work_keccak256`.
     it("matches the Rust implementation", async function () {
       expect(await harness.proofOfWork("0x" + "12".repeat(32), 34n)).to.equal(
-        "0x4bd47978101f127ba6b5f99dff54c6110e351615a65e4f8a9fbfc9003ceaa5ec"
+        "0x4bd47978101f127ba6b5f99dff54c6110e351615a65e4f8a9fbfc9003ceaa5ec",
       );
     });
 
@@ -149,9 +219,11 @@ describe("DEEP verifier", function () {
 
   describe("accepts honest proofs", function () {
     for (const { name, commitment, proof, calldata } of cases) {
-      const { degreeBound, blowupLog2, foldRate, maxRounds, grindingBits } = proof.options;
+      const { degreeBound, securityBits, blowupLog2, foldRate, maxRounds, grindingBits } =
+        proof.options;
       const description =
-        `${name} (degree bound ${degreeBound}, blowup 2^${blowupLog2}, fold rate ${foldRate}, ` +
+        `${name} (degree bound ${degreeBound}, ${securityBits} security bits, ` +
+        `blowup 2^${blowupLog2}, fold rate ${foldRate}, ` +
         `max rounds ${maxRounds === 2n ** 64n - 1n ? "unlimited" : maxRounds}, ` +
         `${grindingBits} grinding bits, ${commitment.batches.length} batches, ` +
         `${proof.points.length} points, ${proof.queries.length} queries)`;
@@ -162,8 +234,16 @@ describe("DEEP verifier", function () {
 
     it("returns the parameters and the opened points", async function () {
       const [options, points] = await harness.verify(sample.commitment, sample.calldata);
-      const { degreeBound, blowupLog2, foldRate, maxRounds, grindingBits } = sample.proof.options;
-      expect(options).to.deep.equal([degreeBound, blowupLog2, foldRate, maxRounds, grindingBits]);
+      const { degreeBound, securityBits, blowupLog2, foldRate, maxRounds, grindingBits } =
+        sample.proof.options;
+      expect(options).to.deep.equal([
+        degreeBound,
+        securityBits,
+        blowupLog2,
+        foldRate,
+        maxRounds,
+        grindingBits,
+      ]);
       expect(points).to.deep.equal(sample.proof.points.map(({ z, values }) => [z, values]));
     });
   });
@@ -296,7 +376,7 @@ describe("DEEP verifier", function () {
       proof.nonce = await findNonce(commitment, proof, false);
       await expect(verify(proof, commitment)).to.be.revertedWithCustomError(
         harness,
-        "InsufficientProofOfWork"
+        "InsufficientProofOfWork",
       );
     });
 
@@ -312,8 +392,27 @@ describe("DEEP verifier", function () {
       proof.options.grindingBits = 127n;
       await expect(verify(proof, structuredClone(ground.commitment))).to.be.revertedWithCustomError(
         harness,
-        "InsufficientProofOfWork"
+        "InsufficientProofOfWork",
       );
+    });
+
+    it("rejects an overstated security level", async function () {
+      const proof = sampleProof();
+      proof.options.securityBits = 130n;
+      await expect(verify(proof)).to.revert(ethers);
+    });
+
+    it("rejects an understated security level", async function () {
+      const proof = sampleProof();
+      proof.options.securityBits = 126n;
+      await expect(verify(proof)).to.be.revertedWithCustomError(harness, "TrailingData");
+    });
+
+    it("rejects a huge security level", async function () {
+      const proof = sampleProof();
+      // The largest value of a varint, which would mean 2^63 queries.
+      proof.options.securityBits = 2n ** 64n - 1n;
+      await expect(verify(proof)).to.revert(ethers);
     });
 
     it("rejects understated grinding", async function () {
@@ -393,7 +492,7 @@ describe("DEEP verifier", function () {
     it("rejects a commitment without batches", async function () {
       await expect(verify(sampleProof(), { batches: [] })).to.be.revertedWithCustomError(
         harness,
-        "NoBatches"
+        "NoBatches",
       );
     });
 
@@ -457,7 +556,7 @@ describe("DEEP verifier", function () {
     it("rejects an empty proof", async function () {
       await expect(harness.verify(sampleCommitment(), "0x")).to.be.revertedWithCustomError(
         harness,
-        "TruncatedProof"
+        "TruncatedProof",
       );
     });
   });

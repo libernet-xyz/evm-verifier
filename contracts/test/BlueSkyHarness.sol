@@ -45,9 +45,7 @@ contract BlueSkyHarness {
         return BlueSky.div(a, b);
     }
 
-    function invBatch(
-        uint256[] calldata values
-    ) external view returns (uint256[] memory) {
+    function invBatch(uint256[] calldata values) external view returns (uint256[] memory) {
         uint256[] memory result = values;
         BlueSky.invBatch(result);
         return result;
@@ -102,11 +100,11 @@ contract BlueSkyHarness {
     }
 
     function rootOfUnity() external pure returns (uint256) {
-        return BlueSky.ROOT_OF_UNITY;
+        return BlueSky.TWO_ADIC_ROOT_OF_UNITY;
     }
 
     function rootOfUnityInv() external pure returns (uint256) {
-        return BlueSky.ROOT_OF_UNITY_INV;
+        return BlueSky.TWO_ADIC_ROOT_OF_UNITY_INV;
     }
 
     function threeAdicRootOfUnity() external pure returns (uint256) {

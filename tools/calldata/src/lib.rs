@@ -14,8 +14,9 @@
 //!
 //! The heap contains, in order:
 //!
-//! 1. the protocol parameters and the other integers of the proof: `degree_bound`, `blowup_log2`,
-//!    `fold_rate`, `max_rounds`, `grinding_bits`, `nonce`, and `num_polys`;
+//! 1. the protocol parameters and the other integers of the proof: `degree_bound`,
+//!    `security_bits`, `blowup_log2`, `fold_rate`, `max_rounds`, `grinding_bits`, `nonce`, and
+//!    `num_polys`;
 //! 2. the number of opened points, then for every point its X-coordinate followed by its
 //!    `num_polys` evaluations;
 //! 3. the FRI roots, then the number of coefficients of the folded quotient followed by the
@@ -108,6 +109,7 @@ fn proof_items(proof: &proto::Proof) -> Result<Vec<Item>> {
     }
     let mut items = vec![
         Item::Varint(proof.degree_bound),
+        Item::Varint(proof.security_bits.into()),
         Item::Varint(proof.blowup_log2.into()),
         Item::Varint(proof.fold_rate.into()),
         Item::Varint(proof.max_rounds),
@@ -223,6 +225,7 @@ mod tests {
         proto::Proof {
             hash_backend: None,
             degree_bound: 4,
+            security_bits: 128,
             blowup_log2: 2,
             fold_rate: 1,
             max_rounds: u64::MAX,
@@ -323,8 +326,8 @@ mod tests {
             &hash(0x11)[..],
             &hash(0xaa)[..],
             &hash(0xcc)[..],
-            // Degree bound, blowup, fold rate, max rounds.
-            &[4, 2, 1][..],
+            // Degree bound, security bits (128 takes two bytes), blowup, fold rate, max rounds.
+            &[4, 0x80, 0x80, 2, 1][..],
             &[0xff; 9][..],
             // Grinding bits, nonce, number of polynomials, number of points.
             &[8, 0x81, 0x2c, 1, 1][..],
@@ -359,7 +362,7 @@ mod tests {
         let expected = [
             &[1][..],
             &hash(0x11)[..],
-            &[4, 2, 1][..],
+            &[4, 0x80, 0x80, 2, 1][..],
             &[0xff; 9][..],
             &[8, 0x81, 0x2c, 1, 1][..],
             &word(123)[..],

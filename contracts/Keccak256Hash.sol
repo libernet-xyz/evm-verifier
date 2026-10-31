@@ -19,10 +19,7 @@ library Keccak256Hash {
     }
 
     /// @notice Hashes a binary Merkle tree node. Matches `MerkleHasher::hash_binary`.
-    function hashBinary(
-        bytes32 left,
-        bytes32 right
-    ) internal pure returns (bytes32 result) {
+    function hashBinary(bytes32 left, bytes32 right) internal pure returns (bytes32 result) {
         assembly ("memory-safe") {
             mstore(0x00, left)
             mstore(0x20, right)
@@ -37,24 +34,16 @@ library Keccak256Hash {
         bytes32 dst,
         bytes32[] memory transcript
     ) internal pure returns (bytes32) {
-        return
-            keccak256(
-                abi.encodePacked(dst, uint128(transcript.length), transcript)
-            );
+        return keccak256(abi.encodePacked(dst, uint128(transcript.length), transcript));
     }
 
     /// @notice Generates a Fiat-Shamir challenge from a transcript.
     /// @dev Hashes the transcript twice, with `dst` and `dst + 1`, and reduces the 512-bit
     ///   concatenation of the two hashes (the first one being the most significant half) modulo P.
     ///   Matches `Hasher::challenge`.
-    function challenge(
-        bytes32 dst,
-        bytes32[] memory transcript
-    ) internal pure returns (uint256) {
+    function challenge(bytes32 dst, bytes32[] memory transcript) internal pure returns (uint256) {
         uint256 high = uint256(hashTranscript(dst, transcript));
-        uint256 low = uint256(
-            hashTranscript(bytes32(uint256(dst) + 1), transcript)
-        );
+        uint256 low = uint256(hashTranscript(bytes32(uint256(dst) + 1), transcript));
         return addmod(mulmod(high, RANGE_MOD_P, BlueSky.P), low, BlueSky.P);
     }
 }

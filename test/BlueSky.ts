@@ -198,7 +198,7 @@ describe("BlueSky field arithmetic", function () {
     it("THREE_ADIC_ROOT_OF_UNITY * THREE_ADIC_ROOT_OF_UNITY_INV = 1", async function () {
       const result = await harness.mul(
         await harness.threeAdicRootOfUnity(),
-        await harness.threeAdicRootOfUnityInv()
+        await harness.threeAdicRootOfUnityInv(),
       );
       expect(result).to.equal(1n);
     });
@@ -596,21 +596,21 @@ describe("BlueSky field arithmetic", function () {
     it("reverts if the first element is zero", async function () {
       await expect(harness.invBatch([0n, 2n, 3n])).to.be.revertedWithCustomError(
         harness,
-        "ZeroDivisor"
+        "ZeroDivisor",
       );
     });
 
     it("reverts if a middle element is zero", async function () {
       await expect(harness.invBatch([2n, 0n, 3n])).to.be.revertedWithCustomError(
         harness,
-        "ZeroDivisor"
+        "ZeroDivisor",
       );
     });
 
     it("reverts if the last element is zero", async function () {
       await expect(harness.invBatch([2n, 3n, 0n])).to.be.revertedWithCustomError(
         harness,
-        "ZeroDivisor"
+        "ZeroDivisor",
       );
     });
 

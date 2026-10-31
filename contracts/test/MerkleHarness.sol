@@ -10,9 +10,7 @@ contract MerkleHarness {
         return Merkle.LEAF_DST;
     }
 
-    function hashLeaf(
-        uint256[] calldata values
-    ) external pure returns (bytes32) {
+    function hashLeaf(uint256[] calldata values) external pure returns (bytes32) {
         uint256 offset;
         assembly {
             offset := values.offset

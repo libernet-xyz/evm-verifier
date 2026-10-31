@@ -1,7 +1,11 @@
 {
   "name": "@starkom/evm-verifier",
   "version": "1.0.0",
-  "scripts": {},
+  "scripts": {
+    "build": "npx hardhat build",
+    "test": "npx hardhat test",
+    "prettier": "prettier --write \"**/*.{sol,js,jsx,mjs,cjs,ts,tsx,mts,cts}\""
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/libernet-xyz/evm-verifier.git"
@@ -28,6 +32,8 @@
     "forge-std": "github:foundry-rs/forge-std#v1.9.4",
     "hardhat": "^3.4.4",
     "mocha": "^11.7.5",
+    "prettier": "^3.9.10",
+    "prettier-plugin-solidity": "^2.4.1",
     "typescript": "~5.8.0"
   }
 }

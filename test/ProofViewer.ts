@@ -62,7 +62,7 @@ describe("ProofViewer", function () {
 
     it("rejects a truncated pool", async function () {
       await expect(
-        harness.open(ethers.concat(["0x02", WORD0, ethers.dataSlice(WORD1, 1)]))
+        harness.open(ethers.concat(["0x02", WORD0, ethers.dataSlice(WORD1, 1)])),
       ).to.be.revertedWithCustomError(harness, "TruncatedProof");
     });
   });
@@ -166,14 +166,14 @@ describe("ProofViewer", function () {
       const heap = ethers.concat(["0x05", ethers.toBeHex(42n, 31)]);
       await expect(harness.popVarintAndWord(proofWithPool(heap))).to.be.revertedWithCustomError(
         harness,
-        "TruncatedProof"
+        "TruncatedProof",
       );
     });
 
     it("rejects a truncated varint", async function () {
       await expect(harness.popPoolWords(proofWithPool("0x00c0"), 2)).to.be.revertedWithCustomError(
         harness,
-        "TruncatedProof"
+        "TruncatedProof",
       );
     });
   });

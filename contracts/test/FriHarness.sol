@@ -17,16 +17,11 @@ contract FriHarness {
         return FriVerifier.numRounds(degreeBound, foldRate, maxRounds);
     }
 
-    function foldingChallenge(
-        bytes32 rootHash
-    ) external pure returns (uint256) {
+    function foldingChallenge(bytes32 rootHash) external pure returns (uint256) {
         return FriVerifier.foldingChallenge(rootHash);
     }
 
-    function reverseBits(
-        uint256 index,
-        uint256 numBits
-    ) external pure returns (uint256) {
+    function reverseBits(uint256 index, uint256 numBits) external pure returns (uint256) {
         return FriVerifier.reverseBits(index, numBits);
     }
 
@@ -50,13 +45,7 @@ contract FriHarness {
         FriCommitment memory decodedCommitment = commitment;
         FriVerifier.validateCommitment(decodedOptions, decodedCommitment);
         ProofViewer memory viewer = ProofViewerMethods.open(proof);
-        FriVerifier.verifyQuery(
-            decodedOptions,
-            viewer,
-            index,
-            decodedCommitment,
-            value
-        );
+        FriVerifier.verifyQuery(decodedOptions, viewer, index, decodedCommitment, value);
         ProofViewerMethods.close(viewer);
     }
 

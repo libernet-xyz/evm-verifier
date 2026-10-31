@@ -15,7 +15,7 @@ const cases = loadFriCases();
 function hashLeaf(values: bigint[]): string {
   return ethers.solidityPackedKeccak256(
     ["uint256", "uint256", "uint256[]"],
-    [LEAF_DST, values.length, values]
+    [LEAF_DST, values.length, values],
   );
 }
 
@@ -84,7 +84,7 @@ describe("Merkle", function () {
     proof: { leaf: bigint[]; path: string[] },
     index: number,
     rootHash: string,
-    height: number = proof.path.length
+    height: number = proof.path.length,
   ) {
     return harness.verify(proof.leaf, encodeMerklePath(proof.path), height, index, rootHash);
   }
@@ -105,19 +105,19 @@ describe("Merkle", function () {
   describe("hashLeaf", function () {
     it("hashLeaf([12])", async function () {
       expect(await harness.hashLeaf([12n])).to.equal(
-        "0x5e70242e081756f445b5f3048611464568002e68800238dcfef718504de01782"
+        "0x5e70242e081756f445b5f3048611464568002e68800238dcfef718504de01782",
       );
     });
 
     it("hashLeaf([34, 56])", async function () {
       expect(await harness.hashLeaf([34n, 56n])).to.equal(
-        "0x6cbf9a3af9793caffe8c509dfaccf0198e833cafa8eb83a0a7d57ce35a97dbd1"
+        "0x6cbf9a3af9793caffe8c509dfaccf0198e833cafa8eb83a0a7d57ce35a97dbd1",
       );
     });
 
     it("hashLeaf([78, 90, 12])", async function () {
       expect(await harness.hashLeaf([78n, 90n, 12n])).to.equal(
-        "0x05ce2ee03a570540c8a67a9b5a419dc7813922da6a39dff3c293806ed0f88fbb"
+        "0x05ce2ee03a570540c8a67a9b5a419dc7813922da6a39dff3c293806ed0f88fbb",
       );
     });
 
@@ -143,7 +143,7 @@ describe("Merkle", function () {
       tampered.leaf[0] = (tampered.leaf[0] + 1n) % P;
       await expect(verify(tampered, index, root)).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
@@ -152,7 +152,7 @@ describe("Merkle", function () {
       tampered.leaf.pop();
       await expect(verify(tampered, index, root)).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
@@ -161,28 +161,28 @@ describe("Merkle", function () {
       tampered.path[2] = ethers.ZeroHash;
       await expect(verify(tampered, index, root)).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
     it("rejects the wrong root", async function () {
       await expect(verify(proof, index, ethers.ZeroHash)).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
     it("rejects the wrong index", async function () {
       await expect(verify(proof, index + 1, root)).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
     it("rejects an index that doesn't fit in the path", async function () {
       await expect(verify(proof, index + leaves.length, root)).to.be.revertedWithCustomError(
         harness,
-        "InvalidIndex"
+        "InvalidIndex",
       );
     });
 
@@ -215,7 +215,7 @@ describe("Merkle", function () {
     const position = 12;
     const pairRoot = hashBinary(
       ethers.toBeHex(opening.coset[0], 32),
-      ethers.toBeHex(opening.coset[1], 32)
+      ethers.toBeHex(opening.coset[1], 32),
     );
 
     it("accepts every FRI opening of every vector", async function () {
@@ -246,33 +246,33 @@ describe("Merkle", function () {
 
     it("rejects a FRI pair at its natural position", async function () {
       await expect(
-        verifyPath(pairRoot, opening.path, 1, honest.commitment.roots[0])
+        verifyPath(pairRoot, opening.path, 1, honest.commitment.roots[0]),
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
     it("rejects a tampered pair", async function () {
       const tampered = hashBinary(
         ethers.toBeHex((opening.coset[0] + 1n) % P, 32),
-        ethers.toBeHex(opening.coset[1], 32)
+        ethers.toBeHex(opening.coset[1], 32),
       );
       await expect(
-        verifyPath(tampered, opening.path, position, honest.commitment.roots[0])
+        verifyPath(tampered, opening.path, position, honest.commitment.roots[0]),
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
     it("rejects a swapped pair", async function () {
       const swapped = hashBinary(
         ethers.toBeHex(opening.coset[1], 32),
-        ethers.toBeHex(opening.coset[0], 32)
+        ethers.toBeHex(opening.coset[0], 32),
       );
       await expect(
-        verifyPath(swapped, opening.path, position, honest.commitment.roots[0])
+        verifyPath(swapped, opening.path, position, honest.commitment.roots[0]),
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
     it("rejects an index that doesn't fit in the path", async function () {
       await expect(
-        verifyPath(pairRoot, opening.path, position + 16, honest.commitment.roots[0])
+        verifyPath(pairRoot, opening.path, position + 16, honest.commitment.roots[0]),
       ).to.be.revertedWithCustomError(harness, "InvalidIndex");
     });
   });

@@ -12,24 +12,21 @@ library BlueSky {
     error ZeroDivisor();
 
     /// @notice The BlueSky prime p.
-    uint256 constant P =
-        0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001;
+    uint256 constant P = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001;
 
     /// @dev p - 2, the exponent used by Fermat's little theorem for inversion:
     ///   a^(p-2) ≡ a^(-1) (mod p) for any a ≠ 0.
-    uint256 constant P_MINUS_2 =
-        0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547bfffffffffffffff;
+    uint256 constant P_MINUS_2 = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547bfffffffffffffff;
 
     /// @dev (P+1)/2 mod P — the multiplicative inverse of 2.
-    uint256 constant TWO_INV =
-        0x3fffffffffffffffffffffffffffffff0339eef94f4daaa3e000000000000001;
+    uint256 constant TWO_INV = 0x3fffffffffffffffffffffffffffffff0339eef94f4daaa3e000000000000001;
 
     /// @dev The primitive 2^62-th root of unity in the BlueSky field.
-    uint256 constant ROOT_OF_UNITY =
+    uint256 constant TWO_ADIC_ROOT_OF_UNITY =
         0x2772569d549e1249ca6891eceba43568f6e0a747a2afe898b3977ca1a5bbfc9c;
 
     /// @dev Inverse of the primitive 2^62-th root of unity.
-    uint256 constant ROOT_OF_UNITY_INV =
+    uint256 constant TWO_ADIC_ROOT_OF_UNITY_INV =
         0x76def406f046ef5ee7eeecd2c4e6ecd7cdedc4e2bcf6b19f1420121cd00b4cdb;
 
     /// @dev The 2-adicity of P-1: P-1 = 2^62 * m for odd m.
@@ -42,16 +39,14 @@ library BlueSky {
     uint256 constant ONE = 1;
 
     /// @dev The largest field element, p - 1 (that is, -1).
-    uint256 constant MAX =
-        0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000000;
+    uint256 constant MAX = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000000;
 
     /// @dev The multiplicative generator of the field, which is also a quadratic non-residue.
     uint256 constant MULTIPLICATIVE_GENERATOR = 5;
 
     /// @dev The generator raised to 2^S, i.e. 5^(2^62). It generates the subgroup of odd order
     ///   (P-1)/2^S.
-    uint256 constant DELTA =
-        0x232680e97f4b6251c95edefd145053d6dea23905b503a1002987caddeb54cdce;
+    uint256 constant DELTA = 0x232680e97f4b6251c95edefd145053d6dea23905b503a1002987caddeb54cdce;
 
     /// @dev The exponent of the S-box x -> x^ALPHA used by the Poseidon hash over this field.
     uint256 constant ALPHA = 5;
@@ -60,8 +55,7 @@ library BlueSky {
     uint256 constant T = 39;
 
     /// @dev The multiplicative inverse of 3.
-    uint256 constant THREE_INV =
-        0x55555555555555555555555555555554044d3ea1bf1238da8000000000000001;
+    uint256 constant THREE_INV = 0x55555555555555555555555555555554044d3ea1bf1238da8000000000000001;
 
     /// @dev The primitive 3^39-th root of unity in the BlueSky field.
     uint256 constant THREE_ADIC_ROOT_OF_UNITY =

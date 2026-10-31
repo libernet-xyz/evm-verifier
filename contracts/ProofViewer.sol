@@ -43,9 +43,7 @@ library ProofViewerMethods {
     error InvalidPoolIndex(uint256 index, uint256 poolSize);
 
     /// @notice Opens a proof, returning a viewer whose cursor is at the beginning of the heap.
-    function open(
-        bytes calldata proof
-    ) internal pure returns (ProofViewer memory viewer) {
+    function open(bytes calldata proof) internal pure returns (ProofViewer memory viewer) {
         uint256 start;
         uint256 end;
         assembly {
@@ -61,19 +59,11 @@ library ProofViewerMethods {
         if (heap > end) {
             revert TruncatedProof();
         }
-        viewer = ProofViewer({
-            pool: pool,
-            poolSize: poolSize,
-            cursor: heap,
-            end: end
-        });
+        viewer = ProofViewer({pool: pool, poolSize: poolSize, cursor: heap, end: end});
     }
 
     /// @notice Returns the word at position `index` of the pool, reverting if it's out of range.
-    function poolWord(
-        ProofViewer memory self,
-        uint256 index
-    ) internal pure returns (bytes32 word) {
+    function poolWord(ProofViewer memory self, uint256 index) internal pure returns (bytes32 word) {
         uint256 poolSize = self.poolSize;
         if (index >= poolSize) {
             revert InvalidPoolIndex(index, poolSize);
@@ -85,18 +75,14 @@ library ProofViewerMethods {
     }
 
     /// @notice Reads the next varint of the heap.
-    function popVarint(
-        ProofViewer memory self
-    ) internal pure returns (uint256 value) {
+    function popVarint(ProofViewer memory self) internal pure returns (uint256 value) {
         uint256 next;
         (value, next) = _readVarint(self.cursor);
         self.cursor = next;
     }
 
     /// @notice Reads the next inline word of the heap.
-    function popWord(
-        ProofViewer memory self
-    ) internal pure returns (uint256 word) {
+    function popWord(ProofViewer memory self) internal pure returns (uint256 word) {
         uint256 cursor = self.cursor;
         assembly {
             word := calldataload(cursor)
@@ -107,9 +93,7 @@ library ProofViewerMethods {
     }
 
     /// @notice Reads the next varint of the heap and returns the pool word whose index it is.
-    function popPoolWord(
-        ProofViewer memory self
-    ) internal pure returns (bytes32) {
+    function popPoolWord(ProofViewer memory self) internal pure returns (bytes32) {
         return poolWord(self, popVarint(self));
     }
 
@@ -150,9 +134,7 @@ library ProofViewerMethods {
 
     /// @dev Decodes the varint at calldata offset `offset`, returning its value and the offset of
     ///   the byte that follows it.
-    function _readVarint(
-        uint256 offset
-    ) private pure returns (uint256 value, uint256 next) {
+    function _readVarint(uint256 offset) private pure returns (uint256 value, uint256 next) {
         assembly {
             let word := calldataload(offset)
             let first := shr(248, word)

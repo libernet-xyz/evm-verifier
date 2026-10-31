@@ -32,6 +32,7 @@ type Hash = Keccak256Hash<Scalar>;
 /// The protocol parameters used in most test cases, same as in the `starkom_pcs` unit tests.
 const OPTIONS: Options = Options {
     degree_bound: 4,
+    security_bits: 128,
     blowup_log2: 2,
     fold_rate: 1,
     max_rounds: usize::MAX,

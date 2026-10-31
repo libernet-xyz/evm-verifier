@@ -8,11 +8,15 @@ import "./Merkle.sol";
 import "./ProofViewer.sol";
 
 /// @notice The parameters of the DEEP-FRI protocol.
-/// @dev Matches `starkom_pcs::Options`, that is the `degree_bound`, `blowup_log2`, `fold_rate`,
-///   `max_rounds`, and `grinding_bits` fields of the `Proof` protobuf.
+/// @dev Matches `starkom_pcs::Options`, that is the `degree_bound`, `security_bits`,
+///   `blowup_log2`, `fold_rate`, `max_rounds`, and `grinding_bits` fields of the `Proof` protobuf.
 struct DeepOptions {
     /// @dev The proven degree bound, a power of 2.
     uint256 degreeBound;
+    /// @dev The target security level in bits, which determines the number of queries together
+    ///   with `blowupLog2` and `grindingBits` (see `DeepVerifier.numQueries`). The prover chooses
+    ///   it, so callers must check it (see `DeepVerifier.satisfies`).
+    uint256 securityBits;
     /// @dev The base-2 logarithm of the blowup factor, greater than 0.
     uint256 blowupLog2;
     /// @dev The number of FRI folds per round, greater than 0.
@@ -81,9 +85,6 @@ library DeepVerifier {
     /// @dev Reverted when the proof-of-work hash doesn't have enough leading zero bits.
     error InsufficientProofOfWork();
 
-    /// @dev Target security level in bits. Matches `deep::LAMBDA`.
-    uint256 constant LAMBDA = 128;
-
     /// @dev The number of bits of a proof-of-work hash, which is the maximum number of grinding
     ///   bits. Matches `deep::PROOF_OF_WORK_BITS`.
     uint256 constant PROOF_OF_WORK_BITS = 256;
@@ -98,8 +99,7 @@ library DeepVerifier {
 
     /// @dev Domain separator of the challenge combining the committed polynomials:
     ///   `SHA3-256("starkom/deep/rlc")`.
-    bytes32 constant RLC_DST =
-        0x688ae37e5f05871810e7c6777e1c16c55ef4b14f072357586d7a298cefc11368;
+    bytes32 constant RLC_DST = 0x688ae37e5f05871810e7c6777e1c16c55ef4b14f072357586d7a298cefc11368;
 
     /// @dev Domain separator of the challenge combining the DEEP quotients of the opened points:
     ///   `SHA3-256("starkom/deep/quotient")`.
@@ -107,8 +107,7 @@ library DeepVerifier {
         0xa7f91ddaa061a34288a9146bf5afc157211da6ec200650dd93daa9cb4c5b4808;
 
     /// @dev Domain separator of the proof of work: `SHA3-256("starkom/deep/pow")`.
-    bytes32 constant POW_DST =
-        0xd659450ee50ebd3de60604eff7a514c5873b63b66073b1164b1cb61b7b113a51;
+    bytes32 constant POW_DST = 0xd659450ee50ebd3de60604eff7a514c5873b63b66073b1164b1cb61b7b113a51;
 
     /// @dev Values shared by the checks of all the queries of a proof.
     struct Context {
@@ -131,16 +130,39 @@ library DeepVerifier {
         FriCommitment friCommitment;
     }
 
-    /// @notice Returns the number of FRI queries required to achieve the target security level.
+    /// @notice Returns the number of FRI queries required to achieve `securityBits` bits of
+    ///   security.
     /// @dev Matches `deep::num_queries`: every query provides `blowupLog2` bits of security and
     ///   grinding provides the rest. At least one query is always required.
     function numQueries(
+        uint256 securityBits,
         uint256 blowupLog2,
         uint256 grindingBits
     ) internal pure returns (uint256) {
-        uint256 bits = grindingBits < LAMBDA ? LAMBDA - grindingBits : 0;
-        uint256 queries = (bits + blowupLog2 - 1) / blowupLog2;
+        uint256 bits = grindingBits < securityBits ? securityBits - grindingBits : 0;
+        // Rounds up without overflowing, like `usize::div_ceil`.
+        uint256 queries = bits / blowupLog2;
+        if (bits % blowupLog2 != 0) {
+            queries++;
+        }
         return queries > 0 ? queries : 1;
+    }
+
+    /// @notice Returns true iff the parameters `options` of a proof are acceptable to a verifier
+    ///   that expects `expected`.
+    /// @dev Matches `Options::satisfies`: the security level and the number of grinding bits must
+    ///   be greater than or equal to the expected ones, and all other parameters must be equal.
+    function satisfies(
+        DeepOptions memory options,
+        DeepOptions memory expected
+    ) internal pure returns (bool) {
+        return
+            options.degreeBound == expected.degreeBound &&
+            options.securityBits >= expected.securityBits &&
+            options.blowupLog2 == expected.blowupLog2 &&
+            options.foldRate == expected.foldRate &&
+            options.maxRounds == expected.maxRounds &&
+            options.grindingBits >= expected.grindingBits;
     }
 
     /// @notice Encodes the transcript of the DEEP layer: all Merkle roots of the committed
@@ -194,10 +216,7 @@ library DeepVerifier {
     ) internal pure returns (bytes32) {
         bytes32[] memory roots = friCommitment.roots;
         uint256[] memory coefficients = friCommitment.foldedPolynomial;
-        uint256 length = transcript.length +
-            2 +
-            roots.length +
-            coefficients.length;
+        uint256 length = transcript.length + 2 + roots.length + coefficients.length;
         return
             keccak256(
                 abi.encodePacked(
@@ -213,10 +232,7 @@ library DeepVerifier {
     }
 
     /// @notice Computes the proof-of-work hash of a nonce. Matches `deep::proof_of_work`.
-    function proofOfWork(
-        bytes32 seed,
-        uint64 nonce
-    ) internal pure returns (bytes32) {
+    function proofOfWork(bytes32 seed, uint64 nonce) internal pure returns (bytes32) {
         bytes32[] memory transcript = new bytes32[](2);
         transcript[0] = seed;
         transcript[1] = bytes32(uint256(nonce));
@@ -225,10 +241,7 @@ library DeepVerifier {
 
     /// @notice Checks that a proof-of-work hash, interpreted as a big-endian integer, has at least
     ///   `grindingBits` leading zero bits. Matches `deep::check_proof_of_work`.
-    function checkProofOfWork(
-        bytes32 pow,
-        uint256 grindingBits
-    ) internal pure returns (bool) {
+    function checkProofOfWork(bytes32 pow, uint256 grindingBits) internal pure returns (bool) {
         if (grindingBits == 0) {
             return true;
         }
@@ -258,20 +271,21 @@ library DeepVerifier {
     ///   `degreeBound` and their evaluations at the opened points are the ones claimed by the
     ///   proof (see `Proof::verify` for the degree slack).
     ///
-    ///   Callers must check the returned parameters against the expected ones (see
-    ///   `Options::satisfies`) and the returned points against the expected points.
+    ///   Callers must check the returned parameters against the expected ones (see `satisfies`),
+    ///   in particular the security level, which the prover chooses, and the returned points
+    ///   against the expected points.
     ///
     ///   `proof` is encoded in the calldata format of the `calldata` crate (see `ProofViewer`). Its
-    ///   heap contains, in order: the parameters (`degreeBound`, `blowupLog2`, `foldRate`,
-    ///   `maxRounds`, and `grindingBits`), the proof-of-work nonce, and the number of committed
-    ///   polynomials as varints; the number of opened points as a varint, then for every point
-    ///   its X-coordinate and its evaluations as inline words; the FRI roots as pool words; the
-    ///   number of coefficients of the folded quotient as a varint and the coefficients as inline
-    ///   words; and finally for every query, the openings of all the batches (for every batch, the
-    ///   leaf values as inline words and the Merkle path from the leaf up as pool words) followed
-    ///   by the openings of all the FRI rounds (see `FriVerifier.verifyQuery`). The numbers of
-    ///   rounds and queries, the size of every leaf, the height of every Merkle path, and the
-    ///   query indices are not encoded, because the verifier derives them.
+    ///   heap contains, in order: the parameters (`degreeBound`, `securityBits`, `blowupLog2`,
+    ///   `foldRate`, `maxRounds`, and `grindingBits`), the proof-of-work nonce, and the number of
+    ///   committed polynomials as varints; the number of opened points as a varint, then for every
+    ///   point its X-coordinate and its evaluations as inline words; the FRI roots as pool words;
+    ///   the number of coefficients of the folded quotient as a varint and the coefficients as
+    ///   inline words; and finally for every query, the openings of all the batches (for every
+    ///   batch, the leaf values as inline words and the Merkle path from the leaf up as pool words)
+    ///   followed by the openings of all the FRI rounds (see `FriVerifier.verifyQuery`). The
+    ///   numbers of rounds and queries, the size of every leaf, the height of every Merkle path,
+    ///   and the query indices are not encoded, because the verifier derives them.
     ///
     ///   Unlike the Rust implementation, which computes them for every query, this function
     ///   combines the evaluations at every point only once, and inverts all the denominators of the
@@ -279,11 +293,7 @@ library DeepVerifier {
     function verify(
         DeepCommitment memory commitment,
         bytes calldata proof
-    )
-        internal
-        view
-        returns (DeepOptions memory options, DeepPoint[] memory points)
-    {
+    ) internal view returns (DeepOptions memory options, DeepPoint[] memory points) {
         ProofViewer memory viewer = ProofViewerMethods.open(proof);
         options = _readOptions(viewer);
         Context memory context;
@@ -301,22 +311,19 @@ library DeepVerifier {
         });
         context.friCommitment = _readFriCommitment(viewer, context.friOptions);
 
-        bytes32[] memory transcript = deepTranscript(
-            commitment,
-            numPolys,
-            points
-        );
-        bytes32 pow = proofOfWork(
-            querySeed(transcript, context.friCommitment),
-            nonce
-        );
+        bytes32[] memory transcript = deepTranscript(commitment, numPolys, points);
+        bytes32 pow = proofOfWork(querySeed(transcript, context.friCommitment), nonce);
         if (!checkProofOfWork(pow, options.grindingBits)) {
             revert InsufficientProofOfWork();
         }
 
         (context.alpha, context.beta) = deepChallenges(transcript);
         context.pointValues = _pointValues(points, context.alpha);
-        uint256 queries = numQueries(options.blowupLog2, options.grindingBits);
+        uint256 queries = numQueries(
+            options.securityBits,
+            options.blowupLog2,
+            options.grindingBits
+        );
         (context.indices, context.inverses) = _queryIndices(
             points,
             pow,
@@ -334,6 +341,7 @@ library DeepVerifier {
         ProofViewer memory viewer
     ) private pure returns (DeepOptions memory options) {
         options.degreeBound = viewer.popVarint();
+        options.securityBits = viewer.popVarint();
         options.blowupLog2 = viewer.popVarint();
         options.foldRate = viewer.popVarint();
         options.maxRounds = viewer.popVarint();
@@ -342,9 +350,7 @@ library DeepVerifier {
 
     /// @dev Checks the parameters like `Options::validate` and returns the base-2 logarithm of the
     ///   size of the extended evaluation domain.
-    function _validateOptions(
-        DeepOptions memory options
-    ) private pure returns (uint256) {
+    function _validateOptions(DeepOptions memory options) private pure returns (uint256) {
         uint256 degreeBound = options.degreeBound;
         if (degreeBound == 0 || degreeBound & (degreeBound - 1) != 0) {
             revert FriVerifier.InvalidDegreeBound(degreeBound);
@@ -356,14 +362,8 @@ library DeepVerifier {
             revert FriVerifier.InvalidFoldRate();
         }
         uint256 degreeBoundLog2 = _log2(degreeBound);
-        if (
-            degreeBoundLog2 > BlueSky.S ||
-            options.blowupLog2 > BlueSky.S - degreeBoundLog2
-        ) {
-            revert FriVerifier.DomainTooLarge(
-                degreeBoundLog2,
-                options.blowupLog2
-            );
+        if (degreeBoundLog2 > BlueSky.S || options.blowupLog2 > BlueSky.S - degreeBoundLog2) {
+            revert FriVerifier.DomainTooLarge(degreeBoundLog2, options.blowupLog2);
         }
         if (options.grindingBits > PROOF_OF_WORK_BITS) {
             revert InvalidGrindingBits(options.grindingBits);
@@ -373,10 +373,7 @@ library DeepVerifier {
 
     /// @dev Performs the checks of `Commitment::from_proto` and checks the number of polynomials
     ///   of the proof against the commitment like `Proof::verify`.
-    function _validateBatches(
-        DeepCommitment memory commitment,
-        uint256 numPolys
-    ) private pure {
+    function _validateBatches(DeepCommitment memory commitment, uint256 numPolys) private pure {
         DeepBatch[] memory batches = commitment.batches;
         if (batches.length == 0) {
             revert NoBatches();
@@ -463,11 +460,7 @@ library DeepVerifier {
         bytes32 pow,
         uint256 queries,
         uint256 domainSizeLog2
-    )
-        private
-        view
-        returns (uint256[] memory indices, uint256[] memory inverses)
-    {
+    ) private view returns (uint256[] memory indices, uint256[] memory inverses) {
         uint256 domainSize = 1 << domainSizeLog2;
         indices = new uint256[](queries);
         inverses = new uint256[](queries * points.length);
@@ -476,7 +469,7 @@ library DeepVerifier {
             indices[i] = index;
             // `Query::x`: the queried element of the shifted domain, g * omega^index.
             uint256 x = BlueSky.MULTIPLICATIVE_GENERATOR.mul(
-                BlueSky.ROOT_OF_UNITY.pow(index << (BlueSky.S - domainSizeLog2))
+                BlueSky.TWO_ADIC_ROOT_OF_UNITY.pow(index << (BlueSky.S - domainSizeLog2))
             );
             for (uint256 j = 0; j < points.length; j++) {
                 inverses[i * points.length + j] = x.sub(points[j].z);
@@ -496,12 +489,7 @@ library DeepVerifier {
         uint256 i
     ) private view {
         uint256 index = context.indices[i];
-        uint256 combined = _verifyOpenings(
-            viewer,
-            commitment.batches,
-            index,
-            context
-        );
+        uint256 combined = _verifyOpenings(viewer, commitment.batches, index, context);
         uint256 numPoints = context.pointValues.length;
         uint256 quotient = 0;
         uint256 power = BlueSky.ONE;
@@ -512,13 +500,7 @@ library DeepVerifier {
             quotient = quotient.add(term.mul(power));
             power = power.mul(context.beta);
         }
-        FriVerifier.verifyQuery(
-            context.friOptions,
-            viewer,
-            index,
-            context.friCommitment,
-            quotient
-        );
+        FriVerifier.verifyQuery(context.friOptions, viewer, index, context.friCommitment, quotient);
     }
 
     /// @dev Reads and verifies the Merkle proofs opening every batch at `index`, and returns the
@@ -545,14 +527,7 @@ library DeepVerifier {
                 combined = combined.add(value.mul(power));
                 power = power.mul(alpha);
             }
-            Merkle.verify(
-                offset,
-                count,
-                viewer,
-                context.domainSizeLog2,
-                index,
-                batches[b].root
-            );
+            Merkle.verify(offset, count, viewer, context.domainSizeLog2, index, batches[b].root);
         }
     }
 

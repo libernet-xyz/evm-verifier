@@ -22,16 +22,12 @@ library Merkle {
     error RootHashMismatch(bytes32 got, bytes32 want);
 
     /// @dev Domain separator for leaf hashes: `SHA3-512("starkom/merkle/leaf") mod P`.
-    uint256 constant LEAF_DST =
-        0x08cb2652a56289bd316cfcb356f5d2be485538e04a601fb14fc2c98f03077fcb;
+    uint256 constant LEAF_DST = 0x08cb2652a56289bd316cfcb356f5d2be485538e04a601fb14fc2c98f03077fcb;
 
     /// @notice Hashes a leaf of a Merkle tree with vector leaves, whose values are the `count`
     ///   32-byte words at calldata offset `offset`.
     /// @dev Hashes `LEAF_DST`, then the number of values, then the values. Matches `hash_leaf`.
-    function hashLeaf(
-        uint256 offset,
-        uint256 count
-    ) internal pure returns (bytes32 hash) {
+    function hashLeaf(uint256 offset, uint256 count) internal pure returns (bytes32 hash) {
         assembly ("memory-safe") {
             // The input is assembled in the unallocated memory past the free memory pointer.
             let input := mload(0x40)

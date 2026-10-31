@@ -72,8 +72,7 @@ library FriVerifier {
     error FoldedPolynomialMismatch();
 
     /// @dev Domain separator for the folding challenges: `SHA3-256("starkom/fri/fold")`.
-    bytes32 constant FOLD_DST =
-        0x9ffd3556faeb2cae194ce95adf6b3580f590504daa0dea56966ce4ef233844af;
+    bytes32 constant FOLD_DST = 0x9ffd3556faeb2cae194ce95adf6b3580f590504daa0dea56966ce4ef233844af;
 
     /// @notice Returns the number of folding rounds.
     /// @dev Matches `fri::num_rounds`. Every round performs exactly `foldRate` folds, so there can
@@ -89,9 +88,7 @@ library FriVerifier {
     }
 
     /// @notice Derives the folding challenge of a round from the Merkle root of that round.
-    function foldingChallenge(
-        bytes32 rootHash
-    ) internal pure returns (uint256) {
+    function foldingChallenge(bytes32 rootHash) internal pure returns (uint256) {
         bytes32[] memory transcript = new bytes32[](1);
         transcript[0] = rootHash;
         return Keccak256Hash.challenge(FOLD_DST, transcript);
@@ -119,10 +116,7 @@ library FriVerifier {
             revert InvalidFoldRate();
         }
         uint256 degreeBoundLog2 = _log2(degreeBound);
-        if (
-            degreeBoundLog2 > BlueSky.S ||
-            options.blowupLog2 > BlueSky.S - degreeBoundLog2
-        ) {
+        if (degreeBoundLog2 > BlueSky.S || options.blowupLog2 > BlueSky.S - degreeBoundLog2) {
             revert DomainTooLarge(degreeBoundLog2, options.blowupLog2);
         }
 
@@ -207,7 +201,7 @@ library FriVerifier {
         }
         // `evaluate_on_two_adic_domain`: the folded polynomial is evaluated at omega^index, with
         // omega being the primitive 2^k-th root of unity.
-        uint256 x = BlueSky.ROOT_OF_UNITY.pow(index << (BlueSky.S - k));
+        uint256 x = BlueSky.TWO_ADIC_ROOT_OF_UNITY.pow(index << (BlueSky.S - k));
         if (_evaluate(commitment.foldedPolynomial, x) != value) {
             revert FoldedPolynomialMismatch();
         }
@@ -215,10 +209,7 @@ library FriVerifier {
 
     /// @notice Reverses the order of the lowest `numBits` bits of `index`.
     /// @dev Matches `fri::reverse_bits`. Requires `index < 2^numBits`.
-    function reverseBits(
-        uint256 index,
-        uint256 numBits
-    ) internal pure returns (uint256 result) {
+    function reverseBits(uint256 index, uint256 numBits) internal pure returns (uint256 result) {
         for (uint256 i = 0; i < numBits; i++) {
             result = (result << 1) | (index & 1);
             index >>= 1;
@@ -254,26 +245,12 @@ library FriVerifier {
         if (coset[position & (coset.length - 1)] != value) {
             revert LeafValueMismatch();
         }
-        Merkle.verifyPath(
-            _cosetRoot(coset),
-            viewer,
-            k - foldRate,
-            position >> foldRate,
-            rootHash
-        );
+        Merkle.verifyPath(_cosetRoot(coset), viewer, k - foldRate, position >> foldRate, rootHash);
         // omega^(-baseIndex), with omega being the primitive 2^k-th root of unity and `baseIndex`
         // the smallest index of the coset.
         uint256 baseIndex = index & ((1 << (k - foldRate)) - 1);
-        uint256 xInverse = BlueSky.ROOT_OF_UNITY_INV.pow(
-            baseIndex << (BlueSky.S - k)
-        );
-        return
-            _foldCoset(
-                coset,
-                xInverse,
-                rootsInverse,
-                foldingChallenge(rootHash)
-            );
+        uint256 xInverse = BlueSky.TWO_ADIC_ROOT_OF_UNITY_INV.pow(baseIndex << (BlueSky.S - k));
+        return _foldCoset(coset, xInverse, rootsInverse, foldingChallenge(rootHash));
     }
 
     /// @dev Returns the root of the Merkle subtree whose leaves are the given coset, matching
@@ -287,10 +264,7 @@ library FriVerifier {
         while (size > 1) {
             size /= 2;
             for (uint256 i = 0; i < size; i++) {
-                nodes[i] = Keccak256Hash.hashBinary(
-                    nodes[2 * i],
-                    nodes[2 * i + 1]
-                );
+                nodes[i] = Keccak256Hash.hashBinary(nodes[2 * i], nodes[2 * i + 1]);
             }
         }
         return nodes[0];
@@ -298,14 +272,10 @@ library FriVerifier {
 
     /// @dev Returns the 2^foldRate powers of the inverse of the primitive 2^foldRate-th root of
     ///   unity: the element at position j is omega^(-j).
-    function _rootsOfUnityInverse(
-        uint256 foldRate
-    ) private view returns (uint256[] memory roots) {
+    function _rootsOfUnityInverse(uint256 foldRate) private view returns (uint256[] memory roots) {
         uint256 size = 1 << foldRate;
         roots = new uint256[](size);
-        uint256 generator = BlueSky.ROOT_OF_UNITY_INV.pow(
-            1 << (BlueSky.S - foldRate)
-        );
+        uint256 generator = BlueSky.TWO_ADIC_ROOT_OF_UNITY_INV.pow(1 << (BlueSky.S - foldRate));
         uint256 power = BlueSky.ONE;
         for (uint256 j = 0; j < size; j++) {
             roots[j] = power;
@@ -337,9 +307,7 @@ library FriVerifier {
             for (uint256 i = 0; i < size; i++) {
                 uint256 positive = values[2 * i];
                 uint256 negative = values[2 * i + 1];
-                uint256 pointInverse = xInverse.mul(
-                    rootsInverse[reverseBits(i, numBits) << step]
-                );
+                uint256 pointInverse = xInverse.mul(rootsInverse[reverseBits(i, numBits) << step]);
                 // (positive + negative + alpha * x^(-1) * (positive - negative)) / 2
                 values[i] = positive
                     .add(negative)

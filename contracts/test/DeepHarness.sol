@@ -17,10 +17,18 @@ contract DeepHarness {
     }
 
     function numQueries(
+        uint256 securityBits,
         uint256 blowupLog2,
         uint256 grindingBits
     ) external pure returns (uint256) {
-        return DeepVerifier.numQueries(blowupLog2, grindingBits);
+        return DeepVerifier.numQueries(securityBits, blowupLog2, grindingBits);
+    }
+
+    function satisfies(
+        DeepOptions calldata options,
+        DeepOptions calldata expected
+    ) external pure returns (bool) {
+        return DeepVerifier.satisfies(options, expected);
     }
 
     function deepTranscript(
@@ -37,9 +45,7 @@ contract DeepHarness {
         DeepPoint[] calldata points
     ) external pure returns (uint256 alpha, uint256 beta) {
         return
-            DeepVerifier.deepChallenges(
-                DeepVerifier.deepTranscript(commitment, numPolys, points)
-            );
+            DeepVerifier.deepChallenges(DeepVerifier.deepTranscript(commitment, numPolys, points));
     }
 
     function querySeed(
@@ -55,17 +61,11 @@ contract DeepHarness {
             );
     }
 
-    function proofOfWork(
-        bytes32 seed,
-        uint64 nonce
-    ) external pure returns (bytes32) {
+    function proofOfWork(bytes32 seed, uint64 nonce) external pure returns (bytes32) {
         return DeepVerifier.proofOfWork(seed, nonce);
     }
 
-    function checkProofOfWork(
-        bytes32 pow,
-        uint256 grindingBits
-    ) external pure returns (bool) {
+    function checkProofOfWork(bytes32 pow, uint256 grindingBits) external pure returns (bool) {
         return DeepVerifier.checkProofOfWork(pow, grindingBits);
     }
 
@@ -80,11 +80,7 @@ contract DeepHarness {
     function verify(
         DeepCommitment calldata commitment,
         bytes calldata proof
-    )
-        external
-        view
-        returns (DeepOptions memory options, DeepPoint[] memory points)
-    {
+    ) external view returns (DeepOptions memory options, DeepPoint[] memory points) {
         return DeepVerifier.verify(commitment, proof);
     }
 }

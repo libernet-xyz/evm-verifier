@@ -9,10 +9,7 @@ contract Keccak256HashHarness {
         return Keccak256Hash.hash(inputs);
     }
 
-    function hashBinary(
-        bytes32 left,
-        bytes32 right
-    ) external pure returns (bytes32) {
+    function hashBinary(bytes32 left, bytes32 right) external pure returns (bytes32) {
         return Keccak256Hash.hashBinary(left, right);
     }
 
@@ -23,10 +20,7 @@ contract Keccak256HashHarness {
         return Keccak256Hash.hashTranscript(dst, transcript);
     }
 
-    function challenge(
-        bytes32 dst,
-        bytes32[] calldata transcript
-    ) external pure returns (uint256) {
+    function challenge(bytes32 dst, bytes32[] calldata transcript) external pure returns (uint256) {
         return Keccak256Hash.challenge(dst, transcript);
     }
 }

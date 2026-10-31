@@ -7,9 +7,7 @@ import "../ProofViewer.sol";
 contract ProofViewerHarness {
     using ProofViewerMethods for ProofViewer;
 
-    function open(
-        bytes calldata proof
-    ) external pure returns (uint256 poolSize, uint256 heap) {
+    function open(bytes calldata proof) external pure returns (uint256 poolSize, uint256 heap) {
         uint256 start;
         assembly {
             start := proof.offset
@@ -19,10 +17,7 @@ contract ProofViewerHarness {
     }
 
     /// @dev Returns the pool word at `index`.
-    function poolWord(
-        bytes calldata proof,
-        uint256 index
-    ) external pure returns (bytes32) {
+    function poolWord(bytes calldata proof, uint256 index) external pure returns (bytes32) {
         return ProofViewerMethods.open(proof).poolWord(index);
     }
 
@@ -81,10 +76,7 @@ contract ProofViewerHarness {
 
     /// @dev Skips `count` inline words of the heap and returns the proof offset of the first one,
     ///   then closes the proof.
-    function skipWords(
-        bytes calldata proof,
-        uint256 count
-    ) external pure returns (uint256) {
+    function skipWords(bytes calldata proof, uint256 count) external pure returns (uint256) {
         uint256 start;
         assembly {
             start := proof.offset

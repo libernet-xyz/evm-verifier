@@ -68,7 +68,7 @@ describe("FRI verifier", function () {
     query: FriQuery,
     commitment: FriCommitment,
     value: bigint = honest.values[QUERY_INDEX],
-    options: FriOptions = OPTIONS
+    options: FriOptions = OPTIONS,
   ) {
     return harness.verifyQuery(options, encodeFriQueries([query]), query.index, commitment, value);
   }
@@ -77,7 +77,7 @@ describe("FRI verifier", function () {
     // From `starkom_pcs::fri::tests::test_fold_dst`.
     it("matches the Rust implementation", async function () {
       expect(await harness.foldDst()).to.equal(
-        "0x9ffd3556faeb2cae194ce95adf6b3580f590504daa0dea56966ce4ef233844af"
+        "0x9ffd3556faeb2cae194ce95adf6b3580f590504daa0dea56966ce4ef233844af",
       );
     });
   });
@@ -131,7 +131,7 @@ describe("FRI verifier", function () {
     it("is the challenge of a one-element transcript with FOLD_DST", async function () {
       for (const root of honest.commitment.roots) {
         expect(await harness.foldingChallenge(root)).to.equal(
-          await hashHarness.challenge(await harness.foldDst(), [root])
+          await hashHarness.challenge(await harness.foldDst(), [root]),
         );
       }
     });
@@ -150,7 +150,7 @@ describe("FRI verifier", function () {
           encodeFriQueries(queries),
           queries.map((query) => query.index),
           commitment,
-          values
+          values,
         );
       });
     }
@@ -164,7 +164,7 @@ describe("FRI verifier", function () {
 
     it("rejects a foreign commitment", async function () {
       await expect(
-        verify(honestQuery(), structuredClone(foreign.commitment))
+        verify(honestQuery(), structuredClone(foreign.commitment)),
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
@@ -173,7 +173,7 @@ describe("FRI verifier", function () {
       commitment.roots[2] = "0x" + "aa".repeat(32);
       await expect(verify(honestQuery(), commitment)).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
@@ -188,7 +188,7 @@ describe("FRI verifier", function () {
       commitment.roots = commitment.roots.slice(0, 2);
       await expect(verify(honestQuery(), commitment)).to.be.revertedWithCustomError(
         harness,
-        "WrongNumberOfFoldingRounds"
+        "WrongNumberOfFoldingRounds",
       );
     });
 
@@ -197,7 +197,7 @@ describe("FRI verifier", function () {
       query.folds.push(structuredClone(query.folds[query.folds.length - 1]));
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "TrailingData"
+        "TrailingData",
       );
     });
 
@@ -208,7 +208,7 @@ describe("FRI verifier", function () {
       commitment.roots = commitment.roots.slice(0, 2);
       await expect(verify(query, commitment)).to.be.revertedWithCustomError(
         harness,
-        "WrongNumberOfFoldingRounds"
+        "WrongNumberOfFoldingRounds",
       );
     });
 
@@ -217,7 +217,7 @@ describe("FRI verifier", function () {
       commitment.foldedPolynomial[0] = (commitment.foldedPolynomial[0] + 1n) % P;
       await expect(verify(honestQuery(), commitment)).to.be.revertedWithCustomError(
         harness,
-        "FoldedPolynomialMismatch"
+        "FoldedPolynomialMismatch",
       );
     });
 
@@ -238,8 +238,8 @@ describe("FRI verifier", function () {
           structuredClone(testCase.queries[QUERY_INDEX]),
           commitment,
           testCase.values[QUERY_INDEX],
-          testCase.options
-        )
+          testCase.options,
+        ),
       )
         .to.be.revertedWithCustomError(harness, "InvalidFoldedPolynomialSize")
         .withArgs(9n, 8n);
@@ -257,7 +257,7 @@ describe("FRI verifier", function () {
         structuredClone(testCase.queries[QUERY_INDEX]),
         commitment,
         testCase.values[QUERY_INDEX],
-        testCase.options
+        testCase.options,
       );
     });
 
@@ -271,7 +271,7 @@ describe("FRI verifier", function () {
       const value = (honest.values[QUERY_INDEX] + 1n) % P;
       await expect(verify(honestQuery(), honestCommitment(), value)).to.be.revertedWithCustomError(
         harness,
-        "LeafValueMismatch"
+        "LeafValueMismatch",
       );
     });
 
@@ -283,8 +283,8 @@ describe("FRI verifier", function () {
           structuredClone(testCase.queries[QUERY_INDEX]),
           structuredClone(testCase.commitment),
           value,
-          testCase.options
-        )
+          testCase.options,
+        ),
       ).to.be.revertedWithCustomError(harness, "FoldedPolynomialMismatch");
     });
 
@@ -293,7 +293,7 @@ describe("FRI verifier", function () {
       query.folds[0].coset.reverse();
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "LeafValueMismatch"
+        "LeafValueMismatch",
       );
     });
 
@@ -304,7 +304,7 @@ describe("FRI verifier", function () {
       coset[offset] = (coset[offset] + 1n) % P;
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
@@ -313,7 +313,7 @@ describe("FRI verifier", function () {
       query.folds[1] = honestQuery(QUERY_INDEX + 4).folds[1];
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "LeafValueMismatch"
+        "LeafValueMismatch",
       );
     });
 
@@ -335,7 +335,7 @@ describe("FRI verifier", function () {
           query,
           structuredClone(testCase.commitment),
           testCase.values[QUERY_INDEX],
-          options
+          options,
         );
       }
 
@@ -359,7 +359,7 @@ describe("FRI verifier", function () {
       it("rejects a wrong fold rate", async function () {
         const options = { ...testCase.options, foldRate: 2n };
         await expect(
-          verifyCoset(structuredClone(testCase.queries[QUERY_INDEX]), options)
+          verifyCoset(structuredClone(testCase.queries[QUERY_INDEX]), options),
         ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
       });
     });
@@ -369,7 +369,7 @@ describe("FRI verifier", function () {
         verify(honestQuery(), honestCommitment(), honest.values[QUERY_INDEX], {
           ...OPTIONS,
           foldRate: 3n,
-        })
+        }),
       ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
     });
   });
@@ -398,14 +398,14 @@ describe("FRI verifier", function () {
     it("rejects a zero blowup factor", async function () {
       await expect(verifyWith({ blowupLog2: 0n })).to.be.revertedWithCustomError(
         harness,
-        "InvalidBlowupFactor"
+        "InvalidBlowupFactor",
       );
     });
 
     it("rejects a zero fold rate", async function () {
       await expect(verifyWith({ foldRate: 0n })).to.be.revertedWithCustomError(
         harness,
-        "InvalidFoldRate"
+        "InvalidFoldRate",
       );
     });
 
@@ -419,7 +419,7 @@ describe("FRI verifier", function () {
       // 2^59 * 2^3 = 2^62 passes the parameter checks and only fails later on the number of
       // rounds.
       await expect(
-        verifyWith({ degreeBound: 2n ** 59n, blowupLog2: 3n })
+        verifyWith({ degreeBound: 2n ** 59n, blowupLog2: 3n }),
       ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
     });
 
@@ -468,7 +468,7 @@ describe("FRI verifier", function () {
       coset[offset] = (coset[offset] + 1n) % P;
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "LeafValueMismatch"
+        "LeafValueMismatch",
       );
     });
 
@@ -479,7 +479,7 @@ describe("FRI verifier", function () {
       coset[offset] = (coset[offset] + 1n) % P;
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
@@ -491,7 +491,7 @@ describe("FRI verifier", function () {
       coset[offset] = (coset[offset] + 1n) % P;
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "LeafValueMismatch"
+        "LeafValueMismatch",
       );
     });
 
@@ -503,7 +503,7 @@ describe("FRI verifier", function () {
       coset[offset] = (coset[offset] + 1n) % P;
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "LeafValueMismatch"
+        "LeafValueMismatch",
       );
     });
 
@@ -512,7 +512,7 @@ describe("FRI verifier", function () {
       query.folds[1].path[1] = ethers.ZeroHash;
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
@@ -521,7 +521,7 @@ describe("FRI verifier", function () {
       query.index = BigInt(QUERY_INDEX + 1);
       await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
         harness,
-        "RootHashMismatch"
+        "RootHashMismatch",
       );
     });
 
@@ -531,7 +531,7 @@ describe("FRI verifier", function () {
           ...OPTIONS,
           degreeBound: OPTIONS.degreeBound / 2n,
           blowupLog2: OPTIONS.blowupLog2 + 1n,
-        })
+        }),
       ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
     });
 
@@ -540,7 +540,7 @@ describe("FRI verifier", function () {
         verify(honestQuery(), honestCommitment(), honest.values[QUERY_INDEX], {
           ...OPTIONS,
           blowupLog2: OPTIONS.blowupLog2 + 1n,
-        })
+        }),
       ).to.revert(ethers);
     });
 
@@ -549,8 +549,8 @@ describe("FRI verifier", function () {
         verify(
           structuredClone(foreign.queries[QUERY_INDEX]),
           honestCommitment(),
-          foreign.values[QUERY_INDEX]
-        )
+          foreign.values[QUERY_INDEX],
+        ),
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
   });
