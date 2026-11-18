@@ -217,7 +217,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "fri-vectors"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "pbjson",
  "pbjson-build",
@@ -852,6 +852,8 @@ dependencies = [
 [[package]]
 name = "starkom-pcs"
 version = "11.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "444a2aa694f3f0a7f88eb901c27ac1ca6192d0cfddeb8fa1041615d836bd0367"
 dependencies = [
  "anyhow",
  "primitive-types",
