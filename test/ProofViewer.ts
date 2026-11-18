@@ -1,24 +1,36 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import type { ProofViewerHarness } from "../types/ethers-contracts";
-import { encodeVarint } from "./vectors";
+import {
+  encodeHeader,
+  encodeVarint,
+  PROOF_LAYOUT_IDENTIFIER,
+  TEST_LAYOUT_IDENTIFIER,
+} from "./vectors";
 
 const { ethers } = await network.create();
 
 const WORD0 = "0x" + "a0".repeat(32);
 const WORD1 = "0x" + "b1".repeat(32);
 
-/** A proof whose pool holds `WORD0` and `WORD1`, followed by the given heap. */
-function proofWithPool(heap: string) {
-  return ethers.concat(["0x02", WORD0, WORD1, heap]);
+/** SCPF data whose pool holds `WORD0` and `WORD1`, followed by the given stream. */
+function dataWithPool(stream: string) {
+  return ethers.concat([encodeHeader(TEST_LAYOUT_IDENTIFIER, 2), WORD0, WORD1, stream]);
 }
 
-/** A proof with an empty pool, followed by the given heap. */
-function proofWithoutPool(heap: string) {
-  return ethers.concat(["0x00", heap]);
+/** SCPF data with an empty pool, followed by the given stream. */
+function dataWithoutPool(stream: string) {
+  return ethers.concat([encodeHeader(TEST_LAYOUT_IDENTIFIER, 0), stream]);
 }
 
-// Same cases as `test_encode_varint` in the `calldata` crate.
+/** Returns `data` with the byte at `offset` replaced by `value`. */
+function withByte(data: string, offset: number, value: number) {
+  const bytes = ethers.getBytes(data);
+  bytes[offset] = value;
+  return ethers.hexlify(bytes);
+}
+
+// Same cases as `test_encode_varint` in `starkom_pcs::scpf`.
 const VARINTS: [bigint, string][] = [
   [0n, "0x00"],
   [1n, "0x01"],
@@ -31,6 +43,12 @@ const VARINTS: [bigint, string][] = [
   [1n << 21n, "0xe0200000"],
   [(1n << 28n) - 1n, "0xefffffff"],
   [1n << 28n, "0xf010000000"],
+  [(1n << 35n) - 1n, "0xf7ffffffff"],
+  [1n << 35n, "0xf80800000000"],
+  [(1n << 42n) - 1n, "0xfbffffffffff"],
+  [1n << 42n, "0xfc040000000000"],
+  [(1n << 49n) - 1n, "0xfdffffffffffff"],
+  [1n << 49n, "0xfe02000000000000"],
   [(1n << 56n) - 1n, "0xfeffffffffffffff"],
   [1n << 56n, "0xff0100000000000000"],
   [2n ** 64n - 1n, "0xffffffffffffffffff"],
@@ -44,26 +62,113 @@ describe("ProofViewer", function () {
   });
 
   describe("open", function () {
-    it("finds the heap after the pool", async function () {
-      expect(await harness.open(proofWithPool("0x07"))).to.deep.equal([2n, 65n]);
+    it("finds the stream after the pool", async function () {
+      expect(await harness.open(dataWithPool("0x07"), TEST_LAYOUT_IDENTIFIER)).to.deep.equal([
+        2n,
+        128n,
+      ]);
     });
 
-    it("finds the heap of a proof without pool", async function () {
-      expect(await harness.open(proofWithoutPool("0x07"))).to.deep.equal([0n, 1n]);
+    it("finds the stream of data without pool", async function () {
+      expect(await harness.open(dataWithoutPool("0x07"), TEST_LAYOUT_IDENTIFIER)).to.deep.equal([
+        0n,
+        64n,
+      ]);
     });
 
-    it("accepts an empty heap", async function () {
-      expect(await harness.open(proofWithPool("0x"))).to.deep.equal([2n, 65n]);
+    it("accepts an empty stream", async function () {
+      expect(await harness.open(dataWithPool("0x"), TEST_LAYOUT_IDENTIFIER)).to.deep.equal([
+        2n,
+        128n,
+      ]);
     });
 
-    it("rejects an empty proof", async function () {
-      await expect(harness.open("0x")).to.be.revertedWithCustomError(harness, "TruncatedProof");
+    it("reads a pool size of more than one byte", async function () {
+      const data = ethers.concat([
+        encodeHeader(TEST_LAYOUT_IDENTIFIER, 256),
+        ...Array(256).fill(WORD0),
+      ]);
+      expect(await harness.open(data, TEST_LAYOUT_IDENTIFIER)).to.deep.equal([256n, 8256n]);
+    });
+
+    for (const version of [
+      [1, 1, 2],
+      [1, 255, 255],
+    ] as [number, number, number][]) {
+      it(`accepts version ${version.join(".")}`, async function () {
+        const data = encodeHeader(TEST_LAYOUT_IDENTIFIER, 0, version);
+        expect(await harness.open(data, TEST_LAYOUT_IDENTIFIER)).to.deep.equal([0n, 64n]);
+      });
+    }
+
+    for (const major of [0, 2, 10, 255]) {
+      it(`rejects major version ${major}`, async function () {
+        const data = encodeHeader(TEST_LAYOUT_IDENTIFIER, 0, [major, 0, 0]);
+        await expect(harness.open(data, TEST_LAYOUT_IDENTIFIER))
+          .to.be.revertedWithCustomError(harness, "UnsupportedVersion")
+          .withArgs(major);
+      });
+    }
+
+    it("rejects another layout", async function () {
+      await expect(harness.open(dataWithoutPool("0x"), PROOF_LAYOUT_IDENTIFIER))
+        .to.be.revertedWithCustomError(harness, "LayoutMismatch")
+        .withArgs(TEST_LAYOUT_IDENTIFIER);
+    });
+
+    for (const offset of [0, 3]) {
+      it(`rejects a wrong signature (byte ${offset})`, async function () {
+        const data = withByte(dataWithoutPool("0x"), offset, 0x20);
+        await expect(harness.open(data, TEST_LAYOUT_IDENTIFIER)).to.be.revertedWithCustomError(
+          harness,
+          "InvalidHeader",
+        );
+      });
+    }
+
+    for (const offset of [4, 7, 11, 15, 52, 63]) {
+      it(`rejects a nonzero reserved byte (byte ${offset})`, async function () {
+        const data = withByte(dataWithoutPool("0x"), offset, 0x01);
+        await expect(harness.open(data, TEST_LAYOUT_IDENTIFIER)).to.be.revertedWithCustomError(
+          harness,
+          "InvalidHeader",
+        );
+      });
+    }
+
+    it("rejects empty data", async function () {
+      await expect(harness.open("0x", TEST_LAYOUT_IDENTIFIER)).to.be.revertedWithCustomError(
+        harness,
+        "TruncatedProof",
+      );
+    });
+
+    it("rejects a truncated header", async function () {
+      const data = ethers.dataSlice(encodeHeader(TEST_LAYOUT_IDENTIFIER, 0), 0, 63);
+      await expect(harness.open(data, TEST_LAYOUT_IDENTIFIER)).to.be.revertedWithCustomError(
+        harness,
+        "TruncatedProof",
+      );
     });
 
     it("rejects a truncated pool", async function () {
-      await expect(
-        harness.open(ethers.concat(["0x02", WORD0, ethers.dataSlice(WORD1, 1)])),
-      ).to.be.revertedWithCustomError(harness, "TruncatedProof");
+      const data = ethers.concat([
+        encodeHeader(TEST_LAYOUT_IDENTIFIER, 2),
+        WORD0,
+        ethers.dataSlice(WORD1, 1),
+      ]);
+      await expect(harness.open(data, TEST_LAYOUT_IDENTIFIER)).to.be.revertedWithCustomError(
+        harness,
+        "TruncatedProof",
+      );
+    });
+
+    it("rejects the largest pool size", async function () {
+      const data = encodeHeader(TEST_LAYOUT_IDENTIFIER, 2 ** 32 - 1);
+      await expect(harness.open(data, TEST_LAYOUT_IDENTIFIER)).to.be.revertedWithCustomError(
+        harness,
+        "TruncatedProof",
+      );
     });
   });
 
@@ -74,25 +179,25 @@ describe("ProofViewer", function () {
       });
 
       it(`decodes ${bytes} as ${value}`, async function () {
-        expect(await harness.popVarints(proofWithoutPool(bytes), 1)).to.deep.equal([[value], 0n]);
+        expect(await harness.popVarints(dataWithoutPool(bytes), 1)).to.deep.equal([[value], 0n]);
       });
     }
 
     it("decodes consecutive varints", async function () {
-      const heap = ethers.concat(["0x00", "0x812c", "0xffffffffffffffffff", "0x7f"]);
-      expect(await harness.popVarints(proofWithoutPool(heap), 3)).to.deep.equal([
+      const stream = ethers.concat(["0x00", "0x812c", "0xffffffffffffffffff", "0x7f"]);
+      expect(await harness.popVarints(dataWithoutPool(stream), 3)).to.deep.equal([
         [0n, 300n, 2n ** 64n - 1n],
         1n,
       ]);
     });
 
     it("decodes a varint at the end of the calldata", async function () {
-      // The varint is read with a 32-byte load that goes past the end of the proof.
-      expect(await harness.popVarints(proofWithPool("0xc04000"), 1)).to.deep.equal([[16384n], 0n]);
+      // The varint is read with a 32-byte load that goes past the end of the data.
+      expect(await harness.popVarints(dataWithPool("0xc04000"), 1)).to.deep.equal([[16384n], 0n]);
     });
 
     it("accepts non-minimal encodings", async function () {
-      expect(await harness.popVarints(proofWithoutPool("0x8001"), 1)).to.deep.equal([[1n], 0n]);
+      expect(await harness.popVarints(dataWithoutPool("0x8001"), 1)).to.deep.equal([[1n], 0n]);
     });
 
     it("rejects encodings of more than 64 bits", function () {
@@ -102,21 +207,21 @@ describe("ProofViewer", function () {
 
   describe("pool", function () {
     it("returns the first word", async function () {
-      expect(await harness.poolWord(proofWithPool("0x"), 0)).to.equal(WORD0);
+      expect(await harness.poolWord(dataWithPool("0x"), 0)).to.equal(WORD0);
     });
 
     it("returns the last word", async function () {
-      expect(await harness.poolWord(proofWithPool("0x"), 1)).to.equal(WORD1);
+      expect(await harness.poolWord(dataWithPool("0x"), 1)).to.equal(WORD1);
     });
 
     it("rejects an out-of-range index", async function () {
-      await expect(harness.poolWord(proofWithPool("0x"), 2))
+      await expect(harness.poolWord(dataWithPool("0x"), 2))
         .to.be.revertedWithCustomError(harness, "InvalidPoolIndex")
         .withArgs(2n, 2n);
     });
 
-    it("returns the words referred to by the heap", async function () {
-      expect(await harness.popPoolWords(proofWithPool("0x010001"), 3)).to.deep.equal([
+    it("returns the words referred to by the stream", async function () {
+      expect(await harness.popPoolWords(dataWithPool("0x010001"), 3)).to.deep.equal([
         WORD1,
         WORD0,
         WORD1,
@@ -124,7 +229,7 @@ describe("ProofViewer", function () {
     });
 
     it("rejects an out-of-range reference", async function () {
-      await expect(harness.popPoolWords(proofWithPool("0x0102"), 2))
+      await expect(harness.popPoolWords(dataWithPool("0x0102"), 2))
         .to.be.revertedWithCustomError(harness, "InvalidPoolIndex")
         .withArgs(2n, 2n);
     });
@@ -132,46 +237,46 @@ describe("ProofViewer", function () {
 
   describe("inline words", function () {
     it("reads a word after a varint", async function () {
-      const heap = ethers.concat(["0x05", ethers.toBeHex(42n, 32)]);
-      expect(await harness.popVarintAndWord(proofWithPool(heap))).to.deep.equal([5n, 42n]);
+      const stream = ethers.concat(["0x05", ethers.toBeHex(42n, 32)]);
+      expect(await harness.popVarintAndWord(dataWithPool(stream))).to.deep.equal([5n, 42n]);
     });
 
     it("reads words into an array", async function () {
-      const heap = ethers.concat([ethers.toBeHex(12n, 32), ethers.toBeHex(34n, 32)]);
-      expect(await harness.popWords(proofWithPool(heap), 2)).to.deep.equal([[12n, 34n], 65n]);
+      const stream = ethers.concat([ethers.toBeHex(12n, 32), ethers.toBeHex(34n, 32)]);
+      expect(await harness.popWords(dataWithPool(stream), 2)).to.deep.equal([[12n, 34n], 128n]);
     });
 
     it("reads no words", async function () {
-      expect(await harness.popWords(proofWithPool("0x"), 0)).to.deep.equal([[], 65n]);
+      expect(await harness.popWords(dataWithPool("0x"), 0)).to.deep.equal([[], 128n]);
     });
 
     it("skips words", async function () {
-      const heap = ethers.concat([ethers.toBeHex(12n, 32), ethers.toBeHex(34n, 32)]);
-      expect(await harness.skipWords(proofWithoutPool(heap), 2)).to.equal(1n);
+      const stream = ethers.concat([ethers.toBeHex(12n, 32), ethers.toBeHex(34n, 32)]);
+      expect(await harness.skipWords(dataWithoutPool(stream), 2)).to.equal(64n);
     });
   });
 
   describe("close", function () {
-    it("accepts a heap read to the end", async function () {
-      await harness.close(proofWithPool("0x"));
+    it("accepts a stream read to the end", async function () {
+      await harness.close(dataWithPool("0x"));
     });
 
     it("rejects trailing data", async function () {
-      await expect(harness.close(proofWithPool("0x0000")))
+      await expect(harness.close(dataWithPool("0x0000")))
         .to.be.revertedWithCustomError(harness, "TrailingData")
         .withArgs(2n);
     });
 
     it("rejects a truncated word", async function () {
-      const heap = ethers.concat(["0x05", ethers.toBeHex(42n, 31)]);
-      await expect(harness.popVarintAndWord(proofWithPool(heap))).to.be.revertedWithCustomError(
+      const stream = ethers.concat(["0x05", ethers.toBeHex(42n, 31)]);
+      await expect(harness.popVarintAndWord(dataWithPool(stream))).to.be.revertedWithCustomError(
         harness,
         "TruncatedProof",
       );
     });
 
     it("rejects a truncated varint", async function () {
-      await expect(harness.popPoolWords(proofWithPool("0x00c0"), 2)).to.be.revertedWithCustomError(
+      await expect(harness.popPoolWords(dataWithPool("0x00c0"), 2)).to.be.revertedWithCustomError(
         harness,
         "TruncatedProof",
       );

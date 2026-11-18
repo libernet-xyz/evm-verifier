@@ -13,7 +13,8 @@ const { ethers } = await network.create();
 
 const P = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001n;
 
-const UNLIMITED = 2n ** 64n - 1n;
+/** `MAX_FRI_ROUNDS`, which stands for no limit on the number of rounds. */
+const UNLIMITED = 2n ** 32n - 1n;
 
 const cases = loadFriCases();
 
@@ -69,8 +70,16 @@ describe("FRI verifier", function () {
     commitment: FriCommitment,
     value: bigint = honest.values[QUERY_INDEX],
     options: FriOptions = OPTIONS,
+    transcriptHash: string = honest.transcriptHash,
   ) {
-    return harness.verifyQuery(options, encodeFriQueries([query]), query.index, commitment, value);
+    return harness.verifyQuery(
+      options,
+      transcriptHash,
+      encodeFriQueries([query]),
+      query.index,
+      commitment,
+      value,
+    );
   }
 
   describe("FOLD_DST", function () {
@@ -128,17 +137,34 @@ describe("FRI verifier", function () {
   });
 
   describe("foldingChallenge", function () {
-    it("is the challenge of a one-element transcript with FOLD_DST", async function () {
+    it("is the challenge of the previous challenge and the root with FOLD_DST", async function () {
+      const previous = "0x" + "12".repeat(32);
       for (const root of honest.commitment.roots) {
-        expect(await harness.foldingChallenge(root)).to.equal(
-          await hashHarness.challenge(await harness.foldDst(), [root]),
+        expect(await harness.foldingChallenge(previous, root)).to.equal(
+          await hashHarness.challenge(await harness.foldDst(), [previous, root]),
         );
       }
     });
   });
 
+  describe("foldingChallenges", function () {
+    it("chains every challenge to the previous one", async function () {
+      const { roots } = honest.commitment;
+      const challenges = await harness.foldingChallenges(honest.transcriptHash, roots);
+      expect(challenges).to.deep.equal([
+        await harness.foldingChallenge(honest.transcriptHash, roots[0]),
+        await harness.foldingChallenge(ethers.toBeHex(challenges[0], 32), roots[1]),
+        await harness.foldingChallenge(ethers.toBeHex(challenges[1], 32), roots[2]),
+      ]);
+    });
+
+    it("returns no challenges without rounds", async function () {
+      expect(await harness.foldingChallenges(honest.transcriptHash, [])).to.deep.equal([]);
+    });
+  });
+
   describe("accepts honest proofs", function () {
-    for (const { name, options, commitment, queries, values } of cases) {
+    for (const { name, options, transcriptHash, commitment, queries, values } of cases) {
       const maxRounds = options.maxRounds === UNLIMITED ? "unlimited" : `${options.maxRounds}`;
       const description =
         `${name} (degree bound ${options.degreeBound}, blowup 2^${options.blowupLog2}, ` +
@@ -147,6 +173,7 @@ describe("FRI verifier", function () {
       it(description, async function () {
         await harness.verifyQueries(
           options,
+          transcriptHash,
           encodeFriQueries(queries),
           queries.map((query) => query.index),
           commitment,
@@ -166,6 +193,20 @@ describe("FRI verifier", function () {
       await expect(
         verify(honestQuery(), structuredClone(foreign.commitment)),
       ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
+    });
+
+    it("rejects another transcript hash", async function () {
+      // Same as `test_reject_other_transcript_hash`: the first round folds with the wrong
+      // challenge, so its result doesn't match the queried value of the second round.
+      await expect(
+        verify(
+          honestQuery(),
+          honestCommitment(),
+          honest.values[QUERY_INDEX],
+          OPTIONS,
+          "0x" + "6f".repeat(32),
+        ),
+      ).to.be.revertedWithCustomError(harness, "LeafValueMismatch");
     });
 
     it("rejects a corrupted root", async function () {

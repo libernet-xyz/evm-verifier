@@ -7,6 +7,8 @@ import {
   type DeepProof,
   encodeDeepProof,
   loadDeepCases,
+  PROOF_LAYOUT_IDENTIFIER,
+  TEST_LAYOUT_IDENTIFIER,
 } from "./vectors";
 
 const { ethers } = await network.create();
@@ -26,6 +28,9 @@ function findCase(name: string) {
 const sample = findCase("sample");
 const ground = findCase("sample with grinding");
 const foreign = findCase("foreign");
+// Same setup as `test_reject_relabeled_batches` in the `starkom_pcs::deep` unit tests: the batches
+// of `sample`, the first one over the base field.
+const mixed = findCase("base and extension batches");
 
 function sampleCommitment(): DeepCommitment {
   return structuredClone(sample.commitment);
@@ -33,6 +38,11 @@ function sampleCommitment(): DeepCommitment {
 
 function sampleProof(): DeepProof {
   return structuredClone(sample.proof);
+}
+
+/** Returns the total number of committed polynomials, like `Commitment::num_polys`. */
+function numPolys(commitment: DeepCommitment): bigint {
+  return commitment.batches.reduce((sum, batch) => sum + batch.numPolys, 0n);
 }
 
 /** Reference implementation of `DeepVerifier.proofOfWork`. */
@@ -52,9 +62,16 @@ describe("DEEP verifier", function () {
     harness = await ethers.deployContract("DeepHarness");
   });
 
-  /** Encodes the proof in the calldata format and verifies it. */
-  function verify(proof: DeepProof, commitment: DeepCommitment = sampleCommitment()) {
-    return harness.verify(commitment, encodeDeepProof(proof));
+  /**
+   * Encodes the proof in SCPF and verifies it against `expected`, which defaults to the parameters
+   * of the proof itself, so that tampering with them tests the transcript binding.
+   */
+  function verify(
+    proof: DeepProof,
+    commitment: DeepCommitment = sampleCommitment(),
+    expected: DeepOptions = proof.options,
+  ) {
+    return harness.verify(expected, commitment, encodeDeepProof(proof));
   }
 
   /**
@@ -63,8 +80,9 @@ describe("DEEP verifier", function () {
    */
   async function findNonce(commitment: DeepCommitment, proof: DeepProof, valid: boolean) {
     const seed = await harness.querySeed(
+      proof.options,
       commitment,
-      proof.numPolys,
+      numPolys(commitment),
       proof.points,
       proof.friCommitment,
     );
@@ -87,6 +105,27 @@ describe("DEEP verifier", function () {
         "0xa7f91ddaa061a34288a9146bf5afc157211da6ec200650dd93daa9cb4c5b4808",
         POW_DST,
       ]);
+    });
+  });
+
+  // The Keccak-256 hash of the full name of the `Proof` protobuf, `starkom.proto.pcs.v11.Proof`,
+  // like the identifier of the SCPF data emitted by `tools/deep-vectors`.
+  describe("proof layout identifier", function () {
+    it("matches the Rust implementation", async function () {
+      expect(await harness.proofLayoutIdentifier()).to.equal(
+        "0x713fa5221bdb77e36ecf0f35b9334072f9e0a92806fb05beb2d479d46df4b573",
+      );
+    });
+
+    it("matches the test encoder", async function () {
+      expect(await harness.proofLayoutIdentifier()).to.equal(PROOF_LAYOUT_IDENTIFIER);
+    });
+  });
+
+  // From `starkom_pcs::MAX_FRI_ROUNDS`.
+  describe("MAX_FRI_ROUNDS", function () {
+    it("matches the Rust implementation", async function () {
+      expect(await harness.maxFriRounds()).to.equal(2n ** 32n - 1n);
     });
   });
 
@@ -140,7 +179,16 @@ describe("DEEP verifier", function () {
       ["equal options", {}],
       ["more grinding bits", { grindingBits: 21n }],
       ["full grinding", { grindingBits: 256n }],
-      ["a higher security level", { securityBits: 256n }],
+      ["a lower fold rate", { foldRate: 1n }],
+      ["a higher fold rate", { foldRate: 4n }],
+      ["no rounds", { maxRounds: 0n }],
+      ["more rounds", { maxRounds: 3n }],
+      ["unlimited rounds", { maxRounds: 2n ** 32n - 1n }],
+      ["another fold rate and number of rounds", { foldRate: 2n, maxRounds: 6n }],
+      [
+        "another fold rate and number of rounds with more grinding bits",
+        { foldRate: 2n, maxRounds: 6n, grindingBits: 21n },
+      ],
     ];
     for (const [name, changes] of accepted) {
       it(`accepts ${name}`, async function () {
@@ -151,27 +199,97 @@ describe("DEEP verifier", function () {
       ["fewer grinding bits", { grindingBits: 19n }],
       ["no grinding", { grindingBits: 0n }],
       ["a lower security level", { securityBits: 127n }],
+      ["a higher security level", { securityBits: 256n }],
       [
-        "a higher security level with fewer grinding bits",
-        { securityBits: 256n, grindingBits: 19n },
+        "a higher security level with more grinding bits",
+        { securityBits: 256n, grindingBits: 21n },
       ],
       ["a smaller degree bound", { degreeBound: 2048n }],
       ["a larger degree bound", { degreeBound: 8192n }],
       ["a smaller blowup factor", { blowupLog2: 5n }],
       ["a larger blowup factor", { blowupLog2: 7n }],
-      ["a lower fold rate", { foldRate: 2n }],
-      ["a higher fold rate", { foldRate: 4n }],
-      ["fewer rounds", { maxRounds: 1n }],
-      ["more rounds", { maxRounds: 3n }],
       ["a larger degree bound with more grinding bits", { degreeBound: 8192n, grindingBits: 21n }],
-      [
-        "a larger degree bound with a higher security level",
-        { degreeBound: 8192n, securityBits: 256n },
-      ],
+      ["a larger blowup factor with another fold rate", { blowupLog2: 7n, foldRate: 1n }],
     ];
     for (const [name, changes] of rejected) {
       it(`rejects ${name}`, async function () {
         expect(await harness.satisfies({ ...expected, ...changes }, expected)).to.equal(false);
+      });
+    }
+  });
+
+  // Mirrors `starkom_pcs::deep::tests::test_deep_challenges_bind_options` and
+  // `test_query_seed_binds_options`.
+  describe("transcript", function () {
+    const points = sample.proof.points;
+    const options = sample.proof.options;
+    const others: [string, Partial<DeepOptions>][] = [
+      ["degree bound", { degreeBound: 8n }],
+      ["security level", { securityBits: 129n }],
+      ["blowup factor", { blowupLog2: 3n }],
+      ["fold rate", { foldRate: 2n }],
+      ["maximum number of rounds", { maxRounds: 1n }],
+      ["number of grinding bits", { grindingBits: 8n }],
+    ];
+
+    it("starts with the parameters", async function () {
+      const commitment = sampleCommitment();
+      const transcript = await harness.deepTranscript(
+        options,
+        commitment,
+        numPolys(commitment),
+        points,
+      );
+      expect(transcript.slice(0, 7)).to.deep.equal(
+        [
+          options.degreeBound,
+          options.securityBits,
+          options.blowupLog2,
+          options.foldRate,
+          options.maxRounds,
+          options.grindingBits,
+          BigInt(commitment.batches.length),
+        ].map((value) => ethers.toBeHex(value, 32)),
+      );
+    });
+
+    for (const [name, changes] of others) {
+      it(`binds the ${name} into the DEEP challenges`, async function () {
+        const commitment = sampleCommitment();
+        const [alpha, beta] = await harness.deepChallenges(
+          options,
+          commitment,
+          numPolys(commitment),
+          points,
+        );
+        const [otherAlpha, otherBeta] = await harness.deepChallenges(
+          { ...options, ...changes },
+          commitment,
+          numPolys(commitment),
+          points,
+        );
+        expect(otherAlpha).to.not.equal(alpha);
+        expect(otherBeta).to.not.equal(beta);
+      });
+
+      it(`binds the ${name} into the query seed`, async function () {
+        const commitment = sampleCommitment();
+        const friCommitment = sample.proof.friCommitment;
+        const seed = await harness.querySeed(
+          options,
+          commitment,
+          numPolys(commitment),
+          points,
+          friCommitment,
+        );
+        const otherSeed = await harness.querySeed(
+          { ...options, ...changes },
+          commitment,
+          numPolys(commitment),
+          points,
+          friCommitment,
+        );
+        expect(otherSeed).to.not.equal(seed);
       });
     }
   });
@@ -210,30 +328,34 @@ describe("DEEP verifier", function () {
   });
 
   describe("encodes proofs like the Rust implementation", function () {
-    for (const { name, proof, calldata } of cases) {
+    for (const { name, proof, scpf } of cases) {
       it(name, function () {
-        expect(encodeDeepProof(proof)).to.equal(calldata);
+        expect(encodeDeepProof(proof)).to.equal(scpf);
       });
     }
   });
 
   describe("accepts honest proofs", function () {
-    for (const { name, commitment, proof, calldata } of cases) {
+    for (const { name, commitment, proof, scpf } of cases) {
       const { degreeBound, securityBits, blowupLog2, foldRate, maxRounds, grindingBits } =
         proof.options;
       const description =
         `${name} (degree bound ${degreeBound}, ${securityBits} security bits, ` +
         `blowup 2^${blowupLog2}, fold rate ${foldRate}, ` +
-        `max rounds ${maxRounds === 2n ** 64n - 1n ? "unlimited" : maxRounds}, ` +
+        `max rounds ${maxRounds === 2n ** 32n - 1n ? "unlimited" : maxRounds}, ` +
         `${grindingBits} grinding bits, ${commitment.batches.length} batches, ` +
         `${proof.points.length} points, ${proof.queries.length} queries)`;
       it(description, async function () {
-        await harness.verify(commitment, calldata);
+        await harness.verify(proof.options, commitment, scpf);
       });
     }
 
     it("returns the parameters and the opened points", async function () {
-      const [options, points] = await harness.verify(sample.commitment, sample.calldata);
+      const [options, points] = await harness.verify(
+        sample.proof.options,
+        sample.commitment,
+        sample.scpf,
+      );
       const { degreeBound, securityBits, blowupLog2, foldRate, maxRounds, grindingBits } =
         sample.proof.options;
       expect(options).to.deep.equal([
@@ -246,6 +368,46 @@ describe("DEEP verifier", function () {
       ]);
       expect(points).to.deep.equal(sample.proof.points.map(({ z, values }) => [z, values]));
     });
+  });
+
+  // Mirrors the `test_reject_*_than_expected` and `test_accept_*_than_expected` tests in
+  // `starkom_pcs::deep::tests`: honest proofs verified against other expected parameters.
+  describe("checks the parameters against the expected ones", function () {
+    function verifyCase(name: string, changes: Partial<DeepOptions>) {
+      const testCase = findCase(name);
+      const expected = { ...testCase.proof.options, ...changes };
+      return harness.verify(expected, testCase.commitment, testCase.scpf);
+    }
+
+    const rejected: [string, string, Partial<DeepOptions>][] = [
+      ["a lower security level than expected", "sample", { securityBits: 129n }],
+      ["a higher security level than expected", "sample", { securityBits: 127n }],
+      ["a higher degree bound than expected", "one round", { degreeBound: 4n }],
+      ["a lower degree bound than expected", "sample", { degreeBound: 8n }],
+      ["another blowup factor than expected", "sample", { blowupLog2: 3n }],
+      ["fewer grinding bits than expected", "sample", { grindingBits: 8n }],
+    ];
+    for (const [description, name, changes] of rejected) {
+      it(`rejects ${description}`, async function () {
+        await expect(verifyCase(name, changes)).to.be.revertedWithCustomError(
+          harness,
+          "OptionsMismatch",
+        );
+      });
+    }
+
+    const accepted: [string, string, Partial<DeepOptions>][] = [
+      ["more grinding bits than expected", "sample with grinding", { grindingBits: 0n }],
+      ["another fold rate than expected", "fold rate 2", { foldRate: 1n }],
+      ["fewer rounds than expected", "one round", { maxRounds: 2n ** 32n - 1n }],
+      ["no rounds when unlimited are expected", "zero rounds", { maxRounds: 2n ** 32n - 1n }],
+      ["unlimited rounds when none are expected", "sample", { maxRounds: 0n }],
+    ];
+    for (const [description, name, changes] of accepted) {
+      it(`accepts ${description}`, async function () {
+        await verifyCase(name, changes);
+      });
+    }
   });
 
   // Mirrors the rejection tests in `starkom_pcs::deep::tests`.
@@ -331,12 +493,34 @@ describe("DEEP verifier", function () {
       await expect(verify(sampleProof(), commitment)).to.revert(ethers);
     });
 
-    it("rejects the wrong number of polynomials", async function () {
-      const proof = sampleProof();
-      proof.numPolys += 1n;
-      await expect(verify(proof))
-        .to.be.revertedWithCustomError(harness, "InvalidNumberOfPolynomials")
-        .withArgs(4n, 3n);
+    it("rejects an extra polynomial", async function () {
+      const commitment = sampleCommitment();
+      commitment.batches[1].numPolys += 1n;
+      await expect(verify(sampleProof(), commitment)).to.revert(ethers);
+    });
+
+    it("rejects a number of polynomials that overflows", async function () {
+      const commitment = sampleCommitment();
+      commitment.batches[1].numPolys = ethers.MaxUint256;
+      await expect(verify(sampleProof(), commitment)).to.be.revertedWithPanic(0x11);
+    });
+
+    it("rejects a base-field batch reported as extension", async function () {
+      const commitment = structuredClone(mixed.commitment);
+      commitment.batches[0].baseField = false;
+      await expect(verify(structuredClone(mixed.proof), commitment)).to.be.revertedWithCustomError(
+        harness,
+        "RootHashMismatch",
+      );
+    });
+
+    it("rejects an extension batch reported as base-field", async function () {
+      const commitment = structuredClone(mixed.commitment);
+      commitment.batches[1].baseField = true;
+      await expect(verify(structuredClone(mixed.proof), commitment)).to.be.revertedWithCustomError(
+        harness,
+        "RootHashMismatch",
+      );
     });
 
     it("rejects a missing query", async function () {
@@ -405,7 +589,10 @@ describe("DEEP verifier", function () {
     it("rejects an understated security level", async function () {
       const proof = sampleProof();
       proof.options.securityBits = 126n;
-      await expect(verify(proof)).to.be.revertedWithCustomError(harness, "TrailingData");
+      // The security level is bound into the transcript, so the query indices change and the
+      // first opening doesn't match its Merkle root, before the verifier gets to the trailing
+      // queries.
+      await expect(verify(proof)).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
     it("rejects a huge security level", async function () {
@@ -470,6 +657,14 @@ describe("DEEP verifier", function () {
       // The largest value of a varint.
       proof.options.blowupLog2 = 2n ** 64n - 1n;
       await expect(verify(proof)).to.be.revertedWithCustomError(harness, "DomainTooLarge");
+    });
+
+    it("rejects too many rounds", async function () {
+      const proof = sampleProof();
+      proof.options.maxRounds = 2n ** 32n;
+      await expect(verify(proof))
+        .to.be.revertedWithCustomError(harness, "InvalidMaxRounds")
+        .withArgs(2n ** 32n);
     });
 
     it("rejects unsatisfiable grinding", async function () {
@@ -541,23 +736,52 @@ describe("DEEP verifier", function () {
     });
   });
 
-  describe("rejects malformed calldata", function () {
+  describe("rejects malformed SCPF data", function () {
     it("rejects trailing data", async function () {
-      await expect(harness.verify(sampleCommitment(), ethers.concat([sample.calldata, "0x00"])))
+      await expect(
+        harness.verify(
+          sample.proof.options,
+          sampleCommitment(),
+          ethers.concat([sample.scpf, "0x00"]),
+        ),
+      )
         .to.be.revertedWithCustomError(harness, "TrailingData")
         .withArgs(1n);
     });
 
     it("rejects a truncated proof", async function () {
-      const calldata = ethers.dataSlice(sample.calldata, 0, ethers.dataLength(sample.calldata) - 1);
-      await expect(harness.verify(sampleCommitment(), calldata)).to.revert(ethers);
+      const scpf = ethers.dataSlice(sample.scpf, 0, ethers.dataLength(sample.scpf) - 1);
+      await expect(harness.verify(sample.proof.options, sampleCommitment(), scpf)).to.revert(
+        ethers,
+      );
+    });
+
+    it("rejects another layout", async function () {
+      const scpf = ethers.concat([
+        ethers.dataSlice(sample.scpf, 0, 16),
+        TEST_LAYOUT_IDENTIFIER,
+        ethers.dataSlice(sample.scpf, 48),
+      ]);
+      await expect(harness.verify(sample.proof.options, sampleCommitment(), scpf))
+        .to.be.revertedWithCustomError(harness, "LayoutMismatch")
+        .withArgs(TEST_LAYOUT_IDENTIFIER);
+    });
+
+    it("rejects another major version", async function () {
+      const scpf = ethers.concat([
+        ethers.dataSlice(sample.scpf, 0, 8),
+        "0x0b",
+        ethers.dataSlice(sample.scpf, 9),
+      ]);
+      await expect(harness.verify(sample.proof.options, sampleCommitment(), scpf))
+        .to.be.revertedWithCustomError(harness, "UnsupportedVersion")
+        .withArgs(11n);
     });
 
     it("rejects an empty proof", async function () {
-      await expect(harness.verify(sampleCommitment(), "0x")).to.be.revertedWithCustomError(
-        harness,
-        "TruncatedProof",
-      );
+      await expect(
+        harness.verify(sample.proof.options, sampleCommitment(), "0x"),
+      ).to.be.revertedWithCustomError(harness, "TruncatedProof");
     });
   });
 
@@ -570,8 +794,8 @@ describe("DEEP verifier", function () {
     });
 
     it("rejects an oversized opening path", async function () {
-      // `Proof::verify` in Rust compares `1 << path.len()` with the domain size, which overflows
-      // for paths of 64 or more hashes.
+      // Same as `test_reject_oversized_opening_path` in the `starkom_pcs::deep` unit tests: with 64
+      // more hashes, `1 << path.len()` would wrap around to the domain size.
       const proof = sampleProof();
       for (let i = 0; i < 64; i++) {
         proof.openings[0].proofs[0].path.push(ethers.ZeroHash);

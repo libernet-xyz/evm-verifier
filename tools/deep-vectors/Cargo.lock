@@ -87,14 +87,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "calldata"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "starkom-pcs",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -164,10 +156,10 @@ dependencies = [
 name = "deep-vectors"
 version = "0.1.0"
 dependencies = [
- "calldata",
  "pbjson",
  "pbjson-build",
  "pbjson-types",
+ "primitive-types",
  "prost",
  "prost-build",
  "serde",
@@ -176,6 +168,7 @@ dependencies = [
  "starkom-ff",
  "starkom-pcs",
  "starkom-poly",
+ "starkom-scpf",
 ]
 
 [[package]]
@@ -830,9 +823,9 @@ checksum = "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620"
 
 [[package]]
 name = "starkom-bluesky"
-version = "3.8.0"
+version = "4.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e50943fc877a1742600c48bf0cb01835b9c42e1d6883c3d77c2aa015e0ab6987"
+checksum = "f005cd41ef94c842e29011cc6ce8a44f404653cd965ee904bcd6c0d52ef51ef9"
 dependencies = [
  "anyhow",
  "getrandom 0.2.17",
@@ -845,9 +838,9 @@ dependencies = [
 
 [[package]]
 name = "starkom-ff"
-version = "4.2.1"
+version = "5.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6176a9c66ff55f408d18c4e73e927ce34238507e5c72b6da47ed3f5d7d416490"
+checksum = "7dd1aa8cf87ac8c37b61dbfbb28bc86f2d7ae4292c3396eeefea0b04ed9fd8a0"
 dependencies = [
  "anyhow",
  "getrandom 0.2.17",
@@ -859,7 +852,7 @@ dependencies = [
 
 [[package]]
 name = "starkom-pcs"
-version = "9.0.0"
+version = "11.0.0"
 dependencies = [
  "anyhow",
  "primitive-types",
@@ -876,9 +869,9 @@ dependencies = [
 
 [[package]]
 name = "starkom-poly"
-version = "4.6.3"
+version = "4.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22b799479c93c470dd1f50a9c1ce96c86890f1386d2b7f50c7af64591b668994"
+checksum = "a5022ba87116a4483940833c6aa3ff0e2b24c17a651706f778898b266a63efd9"
 dependencies = [
  "anyhow",
  "starkom-ff",
@@ -886,9 +879,9 @@ dependencies = [
 
 [[package]]
 name = "starkom-poseidon"
-version = "5.1.3"
+version = "5.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa75da5fd3e30248cddc2341298f5b6846669473b06e8d94af0ff96dbef07d15"
+checksum = "1670a5dc17b4e4cfde85f4aeffcb955bada4c3003b1d7f34816b0de504ee3f2f"
 dependencies = [
  "anyhow",
  "primitive-types",
@@ -897,12 +890,24 @@ dependencies = [
 
 [[package]]
 name = "starkom-poseidon2"
-version = "7.1.2"
+version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd2e788942bf5816ce566347291d78f43c3cbcc9af1d5b550d78fa6575376018"
+checksum = "533c5dae2c1a9256ecd520c8542c4098841da551d51d5dcd1e70bf8d36c6ae13"
 dependencies = [
  "anyhow",
  "primitive-types",
+ "starkom-ff",
+]
+
+[[package]]
+name = "starkom-scpf"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb822f974d166acc0d73814584c8df363c7f5a27e38b01262d3b4077d94fa73d"
+dependencies = [
+ "primitive-types",
+ "prost",
+ "sha3",
  "starkom-ff",
 ]
 

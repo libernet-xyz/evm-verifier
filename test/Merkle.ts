@@ -9,6 +9,8 @@ const P = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001n;
 
 const LEAF_DST = 0x08cb2652a56289bd316cfcb356f5d2be485538e04a601fb14fc2c98f03077fcbn;
 
+const BASE_LEAF_DST = 0x2e704cc1e66fb23985c37d2b9530ed50c0e48ae8fa82f63fd25fe7f78bb23a89n;
+
 const cases = loadFriCases();
 
 /** Reference implementation of `Merkle.hashLeaf`. */
@@ -16,6 +18,14 @@ function hashLeaf(values: bigint[]): string {
   return ethers.solidityPackedKeccak256(
     ["uint256", "uint256", "uint256[]"],
     [LEAF_DST, values.length, values],
+  );
+}
+
+/** Reference implementation of `Merkle.hashBaseLeaf`. */
+function hashBaseLeaf(values: bigint[]): string {
+  return ethers.solidityPackedKeccak256(
+    ["uint256", "uint256", "uint256[]"],
+    [BASE_LEAF_DST, values.length, values],
   );
 }
 
@@ -79,7 +89,7 @@ describe("Merkle", function () {
     harness = await ethers.deployContract("MerkleHarness");
   });
 
-  /** Verifies a Merkle proof, passing the path in the calldata format. */
+  /** Verifies a Merkle proof, passing the path in SCPF. */
   function verify(
     proof: { leaf: bigint[]; path: string[] },
     index: number,
@@ -89,15 +99,22 @@ describe("Merkle", function () {
     return harness.verify(proof.leaf, encodeMerklePath(proof.path), height, index, rootHash);
   }
 
-  /** Verifies a Merkle path, passing it in the calldata format. */
+  /** Verifies a Merkle path, passing it in SCPF. */
   function verifyPath(leaf: string, path: string[], index: bigint | number, rootHash: string) {
     return harness.verifyPath(leaf, encodeMerklePath(path), path.length, index, rootHash);
   }
 
   describe("LEAF_DST", function () {
-    // From `starkom_pcs::merkle::tests::test_dsts`.
+    // From `starkom_pcs::merkle::tests::test_leaf_dst_bluesky`.
     it("matches the Rust implementation", async function () {
       expect(await harness.leafDst()).to.equal(LEAF_DST);
+    });
+  });
+
+  describe("BASE_LEAF_DST", function () {
+    // From `starkom_pcs::merkle::tests::test_base_leaf_dst_bluesky`.
+    it("matches the Rust implementation", async function () {
+      expect(await harness.baseLeafDst()).to.equal(BASE_LEAF_DST);
     });
   });
 
@@ -124,6 +141,33 @@ describe("Merkle", function () {
     it("agrees with the reference implementation", async function () {
       for (const leaf of [[12n], [34n, 56n], [78n, 90n, 12n], ...leaves]) {
         expect(await harness.hashLeaf(leaf)).to.equal(hashLeaf(leaf));
+      }
+    });
+  });
+
+  // Test vectors from `starkom_pcs::merkle::tests::test_hash_leaf_base_keccak256_bluesky`.
+  describe("hashBaseLeaf", function () {
+    it("hashBaseLeaf([12])", async function () {
+      expect(await harness.hashBaseLeaf([12n])).to.equal(
+        "0x7d288e2b2c9f5c4b911c5aca935d67e7d2bd5751e043d3b67d95f3b17e39fcf6",
+      );
+    });
+
+    it("hashBaseLeaf([34, 56])", async function () {
+      expect(await harness.hashBaseLeaf([34n, 56n])).to.equal(
+        "0xd2764d0d6a75bd75b93e17960cf2e5028933c132484e869ad16a9d97c1535c15",
+      );
+    });
+
+    it("hashBaseLeaf([78, 90, 12])", async function () {
+      expect(await harness.hashBaseLeaf([78n, 90n, 12n])).to.equal(
+        "0x84a5099e10a4f47788ba1d537dc6386127a0d270673e7a1df30dd1b18954e572",
+      );
+    });
+
+    it("agrees with the reference implementation", async function () {
+      for (const leaf of [[12n], [34n, 56n], [78n, 90n, 12n], ...leaves]) {
+        expect(await harness.hashBaseLeaf(leaf)).to.equal(hashBaseLeaf(leaf));
       }
     });
   });

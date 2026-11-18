@@ -8,7 +8,7 @@ use std::path::PathBuf;
 /// of its build script, and `prost` doesn't support JSON on its own, so we compile the same
 /// definitions again here and let `pbjson` generate the `serde` implementations.
 fn main() -> Result<()> {
-    let proto_dir = PathBuf::from(std::env::var("DEP_STARKOM_PCS_V9_PROTO_DIR").unwrap());
+    let proto_dir = PathBuf::from(std::env::var("DEP_STARKOM_PCS_V11_PROTO_DIR").unwrap());
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let descriptor_path = out_dir.join("descriptors.bin");
 

@@ -2,12 +2,18 @@
 pragma solidity ^0.8.28;
 
 import "../Merkle.sol";
+import "./TestLayout.sol";
 
-/// @dev Thin wrapper exposing Merkle internals for testing. The Merkle paths are passed as proofs
-///   in the calldata format whose heap contains only the pool indices of the sibling hashes.
+/// @dev Thin wrapper exposing Merkle internals for testing. The Merkle paths are passed as SCPF
+///   data with `TEST_LAYOUT_IDENTIFIER`, whose stream contains only the pool references of the
+///   sibling hashes.
 contract MerkleHarness {
     function leafDst() external pure returns (uint256) {
         return Merkle.LEAF_DST;
+    }
+
+    function baseLeafDst() external pure returns (uint256) {
+        return Merkle.BASE_LEAF_DST;
     }
 
     function hashLeaf(uint256[] calldata values) external pure returns (bytes32) {
@@ -16,6 +22,14 @@ contract MerkleHarness {
             offset := values.offset
         }
         return Merkle.hashLeaf(offset, values.length);
+    }
+
+    function hashBaseLeaf(uint256[] calldata values) external pure returns (bytes32) {
+        uint256 offset;
+        assembly {
+            offset := values.offset
+        }
+        return Merkle.hashBaseLeaf(offset, values.length);
     }
 
     function verify(
@@ -29,7 +43,7 @@ contract MerkleHarness {
         assembly {
             offset := leaf.offset
         }
-        ProofViewer memory viewer = ProofViewerMethods.open(path);
+        ProofViewer memory viewer = ProofViewerMethods.open(path, TEST_LAYOUT_IDENTIFIER);
         Merkle.verify(offset, leaf.length, viewer, height, index, rootHash);
         ProofViewerMethods.close(viewer);
     }
@@ -41,7 +55,7 @@ contract MerkleHarness {
         uint256 index,
         bytes32 rootHash
     ) external pure {
-        ProofViewer memory viewer = ProofViewerMethods.open(path);
+        ProofViewer memory viewer = ProofViewerMethods.open(path, TEST_LAYOUT_IDENTIFIER);
         Merkle.verifyPath(leaf, viewer, height, index, rootHash);
         ProofViewerMethods.close(viewer);
     }

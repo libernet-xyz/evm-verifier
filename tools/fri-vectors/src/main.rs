@@ -10,9 +10,11 @@
 //!
 //! Usage: `cargo run --release > ../../test/vectors/fri.json`
 
+use primitive_types::H256;
 use prost::Message;
 use serde::Serialize;
 use starkom_bluesky::Scalar;
+use starkom_pcs::MAX_FRI_ROUNDS;
 use starkom_pcs::fri::{Prover, Query};
 use starkom_pcs::hash::Keccak256Hash;
 use starkom_poly::Polynomial;
@@ -22,11 +24,15 @@ use starkom_poly::Polynomial;
 /// Only some of them are used here.
 #[allow(dead_code)]
 mod proto {
-    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v9.rs"));
-    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v9.serde.rs"));
+    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v11.rs"));
+    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v11.serde.rs"));
 }
 
 type Hash = Keccak256Hash<Scalar>;
+
+/// The transcript hash that the folding challenges of all test cases are chained to, same as in the
+/// `starkom_pcs::fri` unit tests. In DEEP-FRI it's the encoded quotient challenge.
+const TRANSCRIPT_HASH: H256 = H256([0x5e; 32]);
 
 /// A FRI test case: a committed polynomial and the queries for every index of its extended domain.
 #[derive(Serialize)]
@@ -36,9 +42,10 @@ struct TestCase {
     degree_bound: usize,
     blowup_log2: usize,
     fold_rate: usize,
-    /// The maximum number of folding rounds, as a decimal string like the `uint64` fields of the
-    /// protobufs (it can be `usize::MAX`).
-    max_rounds: String,
+    /// The maximum number of folding rounds, at most `MAX_FRI_ROUNDS`.
+    max_rounds: usize,
+    /// The transcript hash that the folding challenges are chained to, as a 0x-prefixed hex string.
+    transcript_hash: String,
     /// The roots of the FRI commitment, as 0x-prefixed hex strings.
     roots: Vec<String>,
     /// The coefficients of the folded polynomial, as 0x-prefixed hex strings.
@@ -71,6 +78,7 @@ impl TestCase {
             blowup_log2,
             fold_rate,
             max_rounds,
+            TRANSCRIPT_HASH,
         );
         let commitment = prover.commit();
         let mut queries = vec![];
@@ -78,7 +86,7 @@ impl TestCase {
         for index in 0..(degree_bound << blowup_log2) {
             let query = prover.query(index);
             let value = polynomial.evaluate(query.x());
-            assert!(query.verify(&commitment, value).is_ok());
+            assert!(query.verify(&commitment, TRANSCRIPT_HASH, value).is_ok());
             let proto = query.to_proto();
             // Round-trip through the protobuf to make sure `from_proto` accepts what we emit.
             let decoded = Query::<Scalar, Hash>::from_proto(
@@ -89,7 +97,7 @@ impl TestCase {
                 &proto,
             )
             .unwrap();
-            assert!(decoded.verify(&commitment, value).is_ok());
+            assert!(decoded.verify(&commitment, TRANSCRIPT_HASH, value).is_ok());
             // Convert to the `serde`-enabled copy of the message through the wire format.
             queries.push(proto::Query::decode(proto.encode_to_vec().as_slice()).unwrap());
             values.push(value.to_string());
@@ -99,7 +107,8 @@ impl TestCase {
             degree_bound,
             blowup_log2,
             fold_rate,
-            max_rounds: max_rounds.to_string(),
+            max_rounds,
+            transcript_hash: format!("{TRANSCRIPT_HASH:?}"),
             roots: commitment
                 .roots()
                 .iter()
@@ -120,23 +129,23 @@ impl TestCase {
 fn main() {
     let degree_fifteen: Vec<u64> = (1..=16).map(|value| value * 1_000_003 + 7).collect();
     let cases = [
-        TestCase::new("constant polynomial", &[12], 1, 1, 1, usize::MAX),
+        TestCase::new("constant polynomial", &[12], 1, 1, 1, MAX_FRI_ROUNDS),
         TestCase::new(
             "constant polynomial with a larger blowup",
             &[34],
             1,
             2,
             1,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
-        TestCase::new("polynomial of degree 1", &[12, 34], 2, 1, 1, usize::MAX),
+        TestCase::new("polynomial of degree 1", &[12, 34], 2, 1, 1, MAX_FRI_ROUNDS),
         TestCase::new(
             "polynomial of degree 1 with a larger blowup",
             &[56, 78],
             2,
             3,
             1,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         TestCase::new(
             "polynomial of degree 3",
@@ -144,7 +153,7 @@ fn main() {
             4,
             2,
             1,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         // Same setup as the "honest prover" in the `starkom_pcs::fri` unit tests.
         TestCase::new(
@@ -153,7 +162,7 @@ fn main() {
             8,
             2,
             1,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         // Same setup as the "foreign commitment" in the `starkom_pcs::fri` unit tests.
         TestCase::new(
@@ -162,7 +171,7 @@ fn main() {
             8,
             2,
             1,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         TestCase::new(
             "polynomial of degree 15",
@@ -170,7 +179,7 @@ fn main() {
             16,
             1,
             1,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         // Polynomials whose degree is lower than the degree bound still fold to constants.
         TestCase::new(
@@ -179,7 +188,7 @@ fn main() {
             8,
             1,
             1,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         TestCase::new(
             "polynomial of degree 7 with fold rate 2",
@@ -187,7 +196,7 @@ fn main() {
             8,
             2,
             2,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         TestCase::new(
             "polynomial of degree 15 with fold rate 2",
@@ -195,7 +204,7 @@ fn main() {
             16,
             2,
             2,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         TestCase::new(
             "polynomial of degree 15 with fold rate 3",
@@ -203,7 +212,7 @@ fn main() {
             16,
             2,
             3,
-            usize::MAX,
+            MAX_FRI_ROUNDS,
         ),
         TestCase::new(
             "polynomial of degree 7 with one round",

@@ -16,6 +16,14 @@ contract DeepHarness {
             ];
     }
 
+    function proofLayoutIdentifier() external pure returns (bytes32) {
+        return DeepVerifier.PROOF_LAYOUT_IDENTIFIER;
+    }
+
+    function maxFriRounds() external pure returns (uint256) {
+        return DeepVerifier.MAX_FRI_ROUNDS;
+    }
+
     function numQueries(
         uint256 securityBits,
         uint256 blowupLog2,
@@ -32,23 +40,28 @@ contract DeepHarness {
     }
 
     function deepTranscript(
+        DeepOptions calldata options,
         DeepCommitment calldata commitment,
         uint256 numPolys,
         DeepPoint[] calldata points
     ) external pure returns (bytes32[] memory) {
-        return DeepVerifier.deepTranscript(commitment, numPolys, points);
+        return DeepVerifier.deepTranscript(options, commitment, numPolys, points);
     }
 
     function deepChallenges(
+        DeepOptions calldata options,
         DeepCommitment calldata commitment,
         uint256 numPolys,
         DeepPoint[] calldata points
     ) external pure returns (uint256 alpha, uint256 beta) {
         return
-            DeepVerifier.deepChallenges(DeepVerifier.deepTranscript(commitment, numPolys, points));
+            DeepVerifier.deepChallenges(
+                DeepVerifier.deepTranscript(options, commitment, numPolys, points)
+            );
     }
 
     function querySeed(
+        DeepOptions calldata options,
         DeepCommitment calldata commitment,
         uint256 numPolys,
         DeepPoint[] calldata points,
@@ -56,7 +69,7 @@ contract DeepHarness {
     ) external pure returns (bytes32) {
         return
             DeepVerifier.querySeed(
-                DeepVerifier.deepTranscript(commitment, numPolys, points),
+                DeepVerifier.deepTranscript(options, commitment, numPolys, points),
                 friCommitment
             );
     }
@@ -78,9 +91,10 @@ contract DeepHarness {
     }
 
     function verify(
+        DeepOptions calldata expected,
         DeepCommitment calldata commitment,
         bytes calldata proof
     ) external view returns (DeepOptions memory options, DeepPoint[] memory points) {
-        return DeepVerifier.verify(commitment, proof);
+        return DeepVerifier.verify(expected, commitment, proof);
     }
 }
