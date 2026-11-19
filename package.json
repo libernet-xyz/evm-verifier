@@ -11,7 +11,7 @@
     "url": "git+https://github.com/libernet-xyz/evm-verifier.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "Alberto La Rocca <alr@libernet.xyz>",
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/libernet-xyz/evm-verifier/issues"
