@@ -8,55 +8,55 @@ import "./TestLayout.sol";
 ///   data with `TEST_LAYOUT_IDENTIFIER`, whose stream contains only the pool references of the
 ///   sibling hashes.
 contract MerkleHarness {
-    function leafDst() external pure returns (uint256) {
-        return Merkle.LEAF_DST;
-    }
+  function leafDst() external pure returns (uint256) {
+    return Merkle.LEAF_DST;
+  }
 
-    function baseLeafDst() external pure returns (uint256) {
-        return Merkle.BASE_LEAF_DST;
-    }
+  function baseLeafDst() external pure returns (uint256) {
+    return Merkle.BASE_LEAF_DST;
+  }
 
-    function hashLeaf(uint256[] calldata values) external pure returns (bytes32) {
-        uint256 offset;
-        assembly {
-            offset := values.offset
-        }
-        return Merkle.hashLeaf(offset, values.length);
+  function hashLeaf(uint256[] calldata values) external pure returns (bytes32) {
+    uint256 offset;
+    assembly {
+      offset := values.offset
     }
+    return Merkle.hashLeaf(offset, values.length);
+  }
 
-    function hashBaseLeaf(uint256[] calldata values) external pure returns (bytes32) {
-        uint256 offset;
-        assembly {
-            offset := values.offset
-        }
-        return Merkle.hashBaseLeaf(offset, values.length);
+  function hashBaseLeaf(uint256[] calldata values) external pure returns (bytes32) {
+    uint256 offset;
+    assembly {
+      offset := values.offset
     }
+    return Merkle.hashBaseLeaf(offset, values.length);
+  }
 
-    function verify(
-        uint256[] calldata leaf,
-        bytes calldata path,
-        uint256 height,
-        uint256 index,
-        bytes32 rootHash
-    ) external pure {
-        uint256 offset;
-        assembly {
-            offset := leaf.offset
-        }
-        ProofViewer memory viewer = ProofViewerMethods.open(path, TEST_LAYOUT_IDENTIFIER);
-        Merkle.verify(offset, leaf.length, viewer, height, index, rootHash);
-        ProofViewerMethods.close(viewer);
+  function verify(
+    uint256[] calldata leaf,
+    bytes calldata path,
+    uint256 height,
+    uint256 index,
+    bytes32 rootHash
+  ) external pure {
+    uint256 offset;
+    assembly {
+      offset := leaf.offset
     }
+    ProofViewer memory viewer = ProofViewerMethods.open(path, TEST_LAYOUT_IDENTIFIER);
+    Merkle.verify(offset, leaf.length, viewer, height, index, rootHash);
+    ProofViewerMethods.close(viewer);
+  }
 
-    function verifyPath(
-        bytes32 leaf,
-        bytes calldata path,
-        uint256 height,
-        uint256 index,
-        bytes32 rootHash
-    ) external pure {
-        ProofViewer memory viewer = ProofViewerMethods.open(path, TEST_LAYOUT_IDENTIFIER);
-        Merkle.verifyPath(leaf, viewer, height, index, rootHash);
-        ProofViewerMethods.close(viewer);
-    }
+  function verifyPath(
+    bytes32 leaf,
+    bytes calldata path,
+    uint256 height,
+    uint256 index,
+    bytes32 rootHash
+  ) external pure {
+    ProofViewer memory viewer = ProofViewerMethods.open(path, TEST_LAYOUT_IDENTIFIER);
+    Merkle.verifyPath(leaf, viewer, height, index, rootHash);
+    ProofViewerMethods.close(viewer);
+  }
 }
