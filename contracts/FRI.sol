@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.28;
 
-import "./BlueSky.sol";
+import "@starkom/bluesky-sol/contracts/BlueSky.sol";
 import "./Keccak256Hash.sol";
 import "./Merkle.sol";
 import "./ProofViewer.sol";

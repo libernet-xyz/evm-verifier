@@ -6,11 +6,21 @@ export default defineConfig({
   solidity: {
     profiles: {
       default: {
-        version: "0.8.28",
+        version: "0.8.34",
+        settings: {
+          evmVersion: "cancun",
+          debug: {
+            revertStrings: "strip",
+          },
+        },
       },
       production: {
-        version: "0.8.28",
+        version: "0.8.34",
         settings: {
+          evmVersion: "cancun",
+          debug: {
+            revertStrings: "strip",
+          },
           optimizer: {
             enabled: true,
             runs: 1_000_000,
