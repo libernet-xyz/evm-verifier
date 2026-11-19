@@ -11,7 +11,7 @@ pragma solidity ^0.8.28;
 ///   - 8, 9, and 10: the major, minor, and patch version numbers of the format, i.e. of the
 ///     `starkom-scpf` crate that encoded the data;
 ///   - 16: the 32-byte layout identifier, i.e. the Keccak-256 hash of the full name of the
-///     encoded protobuf message, e.g. `keccak256("starkom.proto.pcs.v11.Proof")`;
+///     encoded protobuf message, e.g. `keccak256("starkom.proto.plonk.v11.Proof")`;
 ///   - 48: the pool size, i.e. the number of words of the pool, as a 4-byte big-endian integer.
 ///
 ///   All the other bytes of the header are reserved and must be 0.

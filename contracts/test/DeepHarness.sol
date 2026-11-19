@@ -16,10 +16,6 @@ contract DeepHarness {
       ];
   }
 
-  function proofLayoutIdentifier() external pure returns (bytes32) {
-    return DeepVerifier.PROOF_LAYOUT_IDENTIFIER;
-  }
-
   function maxFriRounds() external pure returns (uint256) {
     return DeepVerifier.MAX_FRI_ROUNDS;
   }
@@ -84,13 +80,5 @@ contract DeepHarness {
 
   function queryIndex(bytes32 pow, uint256 i, uint256 domainSize) external pure returns (uint256) {
     return DeepVerifier.queryIndex(pow, i, domainSize);
-  }
-
-  function verify(
-    DeepOptions calldata expected,
-    DeepCommitment calldata commitment,
-    bytes calldata proof
-  ) external view returns (DeepOptions memory options, DeepPoint[] memory points) {
-    return DeepVerifier.verify(expected, commitment, proof);
   }
 }

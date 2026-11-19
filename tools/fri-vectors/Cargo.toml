@@ -15,6 +15,7 @@ starkom-bluesky = "4.0.1"
 starkom-ff = "5.0.2"
 starkom-pcs = "11.0.0"
 starkom-poly = "4.6.4"
+starkom-scpf = "1.0.2"
 
 [build-dependencies]
 pbjson-build = "0.9.0"

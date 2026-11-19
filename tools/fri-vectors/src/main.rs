@@ -6,7 +6,8 @@
 //!
 //! The FRI queries are serialized with the canonical proto3 JSON mapping of the `starkom-pcs`
 //! protobufs, so for example `bytes` fields are base64 strings and `uint64` fields are decimal
-//! strings, while the fields of the surrounding test cases are plain JSON.
+//! strings, while the fields of the surrounding test cases are plain JSON. The openings of all the
+//! queries are also encoded in SCPF, as read by the FRI harness (see `encode_queries`).
 //!
 //! Usage: `cargo run --release > ../../test/vectors/fri.json`
 
@@ -14,10 +15,13 @@ use primitive_types::H256;
 use prost::Message;
 use serde::Serialize;
 use starkom_bluesky::Scalar;
+use starkom_ff::Field;
 use starkom_pcs::MAX_FRI_ROUNDS;
 use starkom_pcs::fri::{Prover, Query};
 use starkom_pcs::hash::Keccak256Hash;
+use starkom_pcs::starkom::proto::pcs::v11 as pcs_proto;
 use starkom_poly::Polynomial;
+use starkom_scpf::Encoder;
 
 /// Copy of the `starkom-pcs` protobuf messages with `serde` support (see `build.rs`).
 ///
@@ -33,6 +37,40 @@ type Hash = Keccak256Hash<Scalar>;
 /// The transcript hash that the folding challenges of all test cases are chained to, same as in the
 /// `starkom_pcs::fri` unit tests. In DEEP-FRI it's the encoded quotient challenge.
 const TRANSCRIPT_HASH: H256 = H256([0x5e; 32]);
+
+/// Marker for the layout identifier `keccak256("test")` of the SCPF data that the tests pass to the
+/// harnesses (see `TestLayout.sol`): with an empty package, the full name is the plain name.
+#[derive(Clone, PartialEq, prost::Message)]
+struct TestLayout {}
+
+impl prost::Name for TestLayout {
+    const NAME: &'static str = "test";
+    const PACKAGE: &'static str = "";
+}
+
+/// Encodes the openings of FRI queries in SCPF with the test layout, one query after the other, as
+/// read by `FriHarness.verifyQueries`: for every fold, the values of the opened coset as inline
+/// words followed by its Merkle path as pool references.
+fn encode_queries(queries: &[pcs_proto::Query]) -> String {
+    let mut encoder = Encoder::default();
+    for query in queries {
+        for fold in &query.folds {
+            encoder.push_scalars(
+                fold.coset_values
+                    .iter()
+                    .map(|value| Scalar::try_from_le_bytes(value).unwrap()),
+            );
+            encoder.push_hashes(fold.merkle_path.iter().map(|hash| H256::from_slice(hash)));
+        }
+    }
+    let data = encoder.finish::<TestLayout>();
+    format!(
+        "0x{}",
+        data.iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
+}
 
 /// A FRI test case: a committed polynomial and the queries for every index of its extended domain.
 #[derive(Serialize)]
@@ -54,6 +92,9 @@ struct TestCase {
     /// The evaluations of the committed polynomial at the queried elements, as 0x-prefixed hex
     /// strings. There's one for every query.
     values: Vec<String>,
+    /// The openings of all the queries encoded in SCPF (see `encode_queries`), as a 0x-prefixed hex
+    /// string.
+    scpf: String,
 }
 
 impl TestCase {
@@ -82,6 +123,7 @@ impl TestCase {
         );
         let commitment = prover.commit();
         let mut queries = vec![];
+        let mut protos = vec![];
         let mut values = vec![];
         for index in 0..(degree_bound << blowup_log2) {
             let query = prover.query(index);
@@ -100,6 +142,7 @@ impl TestCase {
             assert!(decoded.verify(&commitment, TRANSCRIPT_HASH, value).is_ok());
             // Convert to the `serde`-enabled copy of the message through the wire format.
             queries.push(proto::Query::decode(proto.encode_to_vec().as_slice()).unwrap());
+            protos.push(proto);
             values.push(value.to_string());
         }
         Self {
@@ -122,6 +165,7 @@ impl TestCase {
                 .collect(),
             queries,
             values,
+            scpf: encode_queries(&protos),
         }
     }
 }

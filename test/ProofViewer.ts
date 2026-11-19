@@ -4,7 +4,7 @@ import type { ProofViewerHarness } from "../types/ethers-contracts";
 import {
   encodeHeader,
   encodeVarint,
-  PROOF_LAYOUT_IDENTIFIER,
+  PLONK_LAYOUT_IDENTIFIER,
   TEST_LAYOUT_IDENTIFIER,
 } from "./vectors";
 
@@ -111,7 +111,7 @@ describe("ProofViewer", function () {
     }
 
     it("rejects another layout", async function () {
-      await expect(harness.open(dataWithoutPool("0x"), PROOF_LAYOUT_IDENTIFIER))
+      await expect(harness.open(dataWithoutPool("0x"), PLONK_LAYOUT_IDENTIFIER))
         .to.be.revertedWithCustomError(harness, "LayoutMismatch")
         .withArgs(TEST_LAYOUT_IDENTIFIER);
     });

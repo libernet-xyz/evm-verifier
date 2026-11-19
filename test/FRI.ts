@@ -163,8 +163,16 @@ describe("FRI verifier", function () {
     });
   });
 
+  describe("encodes queries like the Rust implementation", function () {
+    for (const { name, queries, scpf } of cases) {
+      it(name, function () {
+        expect(encodeFriQueries(queries)).to.equal(scpf);
+      });
+    }
+  });
+
   describe("accepts honest proofs", function () {
-    for (const { name, options, transcriptHash, commitment, queries, values } of cases) {
+    for (const { name, options, transcriptHash, commitment, queries, values, scpf } of cases) {
       const maxRounds = options.maxRounds === UNLIMITED ? "unlimited" : `${options.maxRounds}`;
       const description =
         `${name} (degree bound ${options.degreeBound}, blowup 2^${options.blowupLog2}, ` +
@@ -174,7 +182,7 @@ describe("FRI verifier", function () {
         await harness.verifyQueries(
           options,
           transcriptHash,
-          encodeFriQueries(queries),
+          scpf,
           queries.map((query) => query.index),
           commitment,
           values,

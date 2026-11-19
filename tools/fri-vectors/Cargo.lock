@@ -231,6 +231,7 @@ dependencies = [
  "starkom-ff",
  "starkom-pcs",
  "starkom-poly",
+ "starkom-scpf",
 ]
 
 [[package]]
@@ -897,6 +898,18 @@ checksum = "533c5dae2c1a9256ecd520c8542c4098841da551d51d5dcd1e70bf8d36c6ae13"
 dependencies = [
  "anyhow",
  "primitive-types",
+ "starkom-ff",
+]
+
+[[package]]
+name = "starkom-scpf"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1e86541050e833de12eaf9e16def7cf5b81b5d4ea2093b4539e57cd0a3b96c0"
+dependencies = [
+ "primitive-types",
+ "prost",
+ "sha3",
  "starkom-ff",
 ]
 
