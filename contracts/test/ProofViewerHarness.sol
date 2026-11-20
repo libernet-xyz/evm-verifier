@@ -23,11 +23,6 @@ contract ProofViewerHarness {
     return (viewer.poolSize, viewer.cursor - start);
   }
 
-  /// @dev Returns the pool word at `index`.
-  function poolWord(bytes calldata data, uint256 index) external pure returns (bytes32) {
-    return ProofViewerMethods.open(data, TEST_LAYOUT_IDENTIFIER).poolWord(index);
-  }
-
   /// @dev Reads `count` varints from the stream and returns them along with the number of bytes
   ///   left in the data.
   function popVarints(
@@ -43,12 +38,12 @@ contract ProofViewerHarness {
   }
 
   /// @dev Reads a varint and an inline word from the stream, then closes the data.
-  function popVarintAndWord(
+  function popVarintAndInlineWord(
     bytes calldata data
   ) external pure returns (uint256 varint, uint256 word) {
     ProofViewer memory viewer = ProofViewerMethods.open(data, TEST_LAYOUT_IDENTIFIER);
     varint = viewer.popVarint();
-    word = viewer.popWord();
+    word = viewer.popInlineWord();
     viewer.close();
   }
 

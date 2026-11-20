@@ -206,20 +206,6 @@ describe("ProofViewer", function () {
   });
 
   describe("pool", function () {
-    it("returns the first word", async function () {
-      expect(await harness.poolWord(dataWithPool("0x"), 0)).to.equal(WORD0);
-    });
-
-    it("returns the last word", async function () {
-      expect(await harness.poolWord(dataWithPool("0x"), 1)).to.equal(WORD1);
-    });
-
-    it("rejects an out-of-range index", async function () {
-      await expect(harness.poolWord(dataWithPool("0x"), 2))
-        .to.be.revertedWithCustomError(harness, "InvalidPoolIndex")
-        .withArgs(2n, 2n);
-    });
-
     it("returns the words referred to by the stream", async function () {
       expect(await harness.popPoolWords(dataWithPool("0x010001"), 3)).to.deep.equal([
         WORD1,
@@ -230,7 +216,7 @@ describe("ProofViewer", function () {
 
     it("rejects an out-of-range reference", async function () {
       await expect(harness.popPoolWords(dataWithPool("0x0102"), 2))
-        .to.be.revertedWithCustomError(harness, "InvalidPoolIndex")
+        .to.be.revertedWithCustomError(harness, "InvalidPoolReference")
         .withArgs(2n, 2n);
     });
   });
@@ -238,7 +224,7 @@ describe("ProofViewer", function () {
   describe("inline words", function () {
     it("reads a word after a varint", async function () {
       const stream = ethers.concat(["0x05", ethers.toBeHex(42n, 32)]);
-      expect(await harness.popVarintAndWord(dataWithPool(stream))).to.deep.equal([5n, 42n]);
+      expect(await harness.popVarintAndInlineWord(dataWithPool(stream))).to.deep.equal([5n, 42n]);
     });
 
     it("reads words into an array", async function () {
@@ -269,10 +255,9 @@ describe("ProofViewer", function () {
 
     it("rejects a truncated word", async function () {
       const stream = ethers.concat(["0x05", ethers.toBeHex(42n, 31)]);
-      await expect(harness.popVarintAndWord(dataWithPool(stream))).to.be.revertedWithCustomError(
-        harness,
-        "TruncatedProof",
-      );
+      await expect(
+        harness.popVarintAndInlineWord(dataWithPool(stream)),
+      ).to.be.revertedWithCustomError(harness, "TruncatedProof");
     });
 
     it("rejects a truncated varint", async function () {
