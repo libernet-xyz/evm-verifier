@@ -13,8 +13,8 @@
 import { network } from "hardhat";
 import { dataLength } from "ethers";
 import { pathToFileURL } from "node:url";
-import { type Measurement, measure } from "../test/benchmark";
-import { loadPlonkCases } from "../test/vectors";
+import { type Measurement, measure } from "../test/benchmark.js";
+import { loadPlonkCases } from "../test/vectors.js";
 
 const { ethers } = await network.create();
 

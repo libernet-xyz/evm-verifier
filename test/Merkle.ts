@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import type { MerkleHarness } from "../types/ethers-contracts";
-import { encodeMerklePath, loadFriCases } from "./vectors";
+import type { MerkleHarness } from "../types/ethers-contracts/index.js";
+import { encodeMerklePath, loadFriCases } from "./vectors.js";
 
 const { ethers } = await network.create();
 

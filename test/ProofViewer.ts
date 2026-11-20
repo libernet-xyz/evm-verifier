@@ -1,12 +1,12 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import type { ProofViewerHarness } from "../types/ethers-contracts";
+import type { ProofViewerHarness } from "../types/ethers-contracts/index.js";
 import {
   encodeHeader,
   encodeVarint,
   PLONK_LAYOUT_IDENTIFIER,
   TEST_LAYOUT_IDENTIFIER,
-} from "./vectors";
+} from "./vectors.js";
 
 const { ethers } = await network.create();
 

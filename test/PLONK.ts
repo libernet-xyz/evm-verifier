@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import { createHash } from "node:crypto";
-import type { PlonkHarness } from "../types/ethers-contracts";
+import type { PlonkHarness } from "../types/ethers-contracts/index.js";
 import {
   batchSizes,
   decodePlonkProof,
@@ -13,7 +13,7 @@ import {
   type PlonkCircuit,
   type PlonkProofData,
   TEST_LAYOUT_IDENTIFIER,
-} from "./vectors";
+} from "./vectors.js";
 
 const { ethers } = await network.create();
 

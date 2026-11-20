@@ -1,7 +1,7 @@
 import type { HardhatEthers } from "@nomicfoundation/hardhat-ethers/types";
 import { dataLength, getBytes } from "ethers";
-import type { PlonkHarness } from "../types/ethers-contracts";
-import type { PlonkCase } from "./vectors";
+import type { PlonkHarness } from "../types/ethers-contracts/index.js";
+import type { PlonkCase } from "./vectors.js";
 
 /** The base cost of a transaction. */
 const TRANSACTION_GAS = 21000n;

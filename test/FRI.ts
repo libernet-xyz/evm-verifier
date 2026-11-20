@@ -1,13 +1,13 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import type { FriHarness, Keccak256HashHarness } from "../types/ethers-contracts";
+import type { FriHarness, Keccak256HashHarness } from "../types/ethers-contracts/index.js";
 import {
   encodeFriQueries,
   type FriCommitment,
   type FriOptions,
   type FriQuery,
   loadFriCases,
-} from "./vectors";
+} from "./vectors.js";
 
 const { ethers } = await network.create();
 

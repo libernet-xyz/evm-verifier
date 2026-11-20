@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import type { DeepHarness } from "../types/ethers-contracts";
-import type { DeepCommitment, DeepOptions, DeepPoint, FriCommitment } from "./vectors";
+import type { DeepHarness } from "../types/ethers-contracts/index.js";
+import type { DeepCommitment, DeepOptions, DeepPoint, FriCommitment } from "./vectors.js";
 
 const { ethers } = await network.create();
 
