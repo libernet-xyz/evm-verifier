@@ -10,9 +10,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 starkom-bluesky = "4.0.1"
 starkom-ff = "5.0.2"
-# TODO: switch to the published crates once `starkom-pcs` 12, `starkom-plonk` 12, and
-# `starkom-gadgets` 4 are released.
+# TODO: switch to the published crate once `starkom-gadgets` 4 is released.
 starkom-gadgets = { path = "../../../gadgets" }
-starkom-pcs = { path = "../../../pcs" }
-starkom-plonk = { path = "../../../plonk" }
+starkom-pcs = "12.0.0"
+starkom-plonk = "12.0.0"
 starkom-poseidon = { version = "5.1.4", features = ["bluesky"] }
