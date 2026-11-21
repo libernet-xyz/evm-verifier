@@ -101,6 +101,11 @@ library DeepVerifier {
   ///   bits. Matches `deep::PROOF_OF_WORK_BITS`.
   uint256 constant PROOF_OF_WORK_BITS = 256;
 
+  /// @dev Domain separator of the hash of the DEEP transcript:
+  ///   `SHA3-256("starkom/deep/transcript/deep")`.
+  bytes32 constant DEEP_TRANSCRIPT_DST =
+    0x81d5f3b82177662e6bc225147d63ffc9fbc536ce42e554dde965e4e421d0ec8b;
+
   /// @dev Domain separator of the query seed: `SHA3-256("starkom/deep/query/0")`.
   bytes32 constant QUERY_DST0 = 0xbbec7289b9fc3aade75412c031b62a769b205d1d73b29c9a06dbb91943e046bc;
 
@@ -179,8 +184,8 @@ library DeepVerifier {
 
   /// @notice Encodes the transcript of the DEEP layer: the parameters of the proof, all Merkle
   ///   roots of the committed polynomials, all opened points, and their evaluations.
-  /// @dev Matches `deep::deep_transcript`. The parameters come first, in the order of the fields
-  ///   of `DeepOptions`.
+  /// @dev Matches the transcript hashed by `deep::deep_transcript_hash`. The parameters come
+  ///   first, in the order of the fields of `DeepOptions`.
   function deepTranscript(
     DeepOptions memory options,
     DeepCommitment memory commitment,
@@ -215,34 +220,52 @@ library DeepVerifier {
     }
   }
 
+  /// @notice Hashes the transcript of the DEEP layer (see `deepTranscript`).
+  /// @dev Matches `deep::deep_transcript_hash`. All the Fiat-Shamir values of the DEEP layer are
+  ///   derived from this hash, so that the transcript is hashed only once.
+  function deepTranscriptHash(
+    DeepOptions memory options,
+    DeepCommitment memory commitment,
+    uint256 numPolys,
+    DeepPoint[] memory points
+  ) internal pure returns (bytes32) {
+    return
+      Keccak256Hash.hashTranscript(
+        DEEP_TRANSCRIPT_DST,
+        deepTranscript(options, commitment, numPolys, points)
+      );
+  }
+
   /// @notice Derives the challenges combining the committed polynomials and the DEEP quotients
-  ///   of the opened points.
+  ///   of the opened points from the hash of the DEEP transcript (see `deepTranscriptHash`).
   /// @dev Matches `deep::deep_challenges`.
   function deepChallenges(
-    bytes32[] memory transcript
+    bytes32 transcriptHash
   ) internal pure returns (uint256 alpha, uint256 beta) {
+    bytes32[] memory transcript = new bytes32[](1);
+    transcript[0] = transcriptHash;
     alpha = Keccak256Hash.challenge(RLC_DST, transcript);
     beta = Keccak256Hash.challenge(QUOTIENT_DST, transcript);
   }
 
   /// @notice Hashes the full transcript of a proof up to the queries.
-  /// @dev Matches `deep::query_seed`: it's the `Keccak256Hash.hashTranscript` of the DEEP
-  ///   transcript followed by the number of FRI roots, the FRI roots, the number of coefficients
-  ///   of the folded quotient, and the coefficients, but it hashes the two parts in place rather
-  ///   than copying them into a single array.
+  /// @dev Matches `deep::query_seed`: it's the `Keccak256Hash.hashTranscript` of the hash of the
+  ///   DEEP transcript (see `deepTranscriptHash`) followed by the number of FRI roots, the FRI
+  ///   roots, the number of coefficients of the folded quotient, and the coefficients, but it
+  ///   hashes the parts in place rather than copying them into a single array.
   function querySeed(
-    bytes32[] memory transcript,
+    bytes32 transcriptHash,
     FriCommitment memory friCommitment
   ) internal pure returns (bytes32) {
     bytes32[] memory roots = friCommitment.roots;
     uint256[] memory coefficients = friCommitment.foldedPolynomial;
-    uint256 length = transcript.length + 2 + roots.length + coefficients.length;
+    uint256 length = 3 + roots.length + coefficients.length;
     return
       keccak256(
         abi.encodePacked(
           QUERY_DST0,
-          uint128(length),
-          transcript,
+          length,
+          transcriptHash,
           roots.length,
           roots,
           coefficients.length,
@@ -343,13 +366,13 @@ library DeepVerifier {
     });
     context.friCommitment = _readFriCommitment(viewer, context.friOptions);
 
-    bytes32[] memory transcript = deepTranscript(options, commitment, numPolys, points);
-    bytes32 pow = proofOfWork(querySeed(transcript, context.friCommitment), nonce);
+    bytes32 transcriptHash = deepTranscriptHash(options, commitment, numPolys, points);
+    bytes32 pow = proofOfWork(querySeed(transcriptHash, context.friCommitment), nonce);
     if (!checkProofOfWork(pow, options.grindingBits)) {
       revert InsufficientProofOfWork();
     }
 
-    (context.alpha, context.beta) = deepChallenges(transcript);
+    (context.alpha, context.beta) = deepChallenges(transcriptHash);
     context.friChallenges = FriVerifier.foldingChallenges(
       bytes32(context.beta),
       context.friCommitment.roots

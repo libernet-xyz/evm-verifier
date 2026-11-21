@@ -19,7 +19,7 @@ use starkom_ff::Field;
 use starkom_pcs::MAX_FRI_ROUNDS;
 use starkom_pcs::fri::{Prover, Query};
 use starkom_pcs::hash::Keccak256Hash;
-use starkom_pcs::starkom::proto::pcs::v11 as pcs_proto;
+use starkom_pcs::starkom::proto::pcs::v12 as pcs_proto;
 use starkom_poly::Polynomial;
 use starkom_scpf::Encoder;
 
@@ -28,8 +28,8 @@ use starkom_scpf::Encoder;
 /// Only some of them are used here.
 #[allow(dead_code)]
 mod proto {
-    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v11.rs"));
-    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v11.serde.rs"));
+    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v12.rs"));
+    include!(concat!(env!("OUT_DIR"), "/starkom.proto.pcs.v12.serde.rs"));
 }
 
 type Hash = Keccak256Hash<Scalar>;

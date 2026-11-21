@@ -39,7 +39,7 @@ const friCommitment: FriCommitment = {
 function proofOfWork(seed: string, nonce: bigint): bigint {
   return BigInt(
     ethers.solidityPackedKeccak256(
-      ["bytes32", "uint128", "bytes32", "uint256"],
+      ["bytes32", "uint256", "bytes32", "uint256"],
       [POW_DST, 2n, seed, nonce],
     ),
   );
@@ -56,6 +56,7 @@ describe("DEEP verifier", function () {
   describe("domain separators", function () {
     it("match the Rust implementation", async function () {
       expect(await harness.domainSeparators()).to.deep.equal([
+        "0x81d5f3b82177662e6bc225147d63ffc9fbc536ce42e554dde965e4e421d0ec8b",
         "0xbbec7289b9fc3aade75412c031b62a769b205d1d73b29c9a06dbb91943e046bc",
         "0x88209086b178c9f2fb9c2f813cd229e1a2528cb4f5e6cd618710dc9869f14ac5",
         "0x688ae37e5f05871810e7c6777e1c16c55ef4b14f072357586d7a298cefc11368",
@@ -161,8 +162,8 @@ describe("DEEP verifier", function () {
     }
   });
 
-  // Mirrors `starkom_pcs::deep::tests::test_deep_challenges_bind_options` and
-  // `test_query_seed_binds_options`.
+  // Mirrors `starkom_pcs::deep::tests::test_deep_transcript_hash_binds_options`, checking that the
+  // parameters reach both the DEEP challenges and the query seed through the transcript hash.
   describe("transcript", function () {
     const others: [string, Partial<DeepOptions>][] = [
       ["degree bound", { degreeBound: 8n }],
@@ -219,7 +220,7 @@ describe("DEEP verifier", function () {
     // From `starkom_pcs::deep::tests::test_proof_of_work_keccak256`.
     it("matches the Rust implementation", async function () {
       expect(await harness.proofOfWork("0x" + "12".repeat(32), 34n)).to.equal(
-        "0x4bd47978101f127ba6b5f99dff54c6110e351615a65e4f8a9fbfc9003ceaa5ec",
+        "0xfe341a32d1d3987da41fe4262ae9914dd0ab1f0234dac9ff5b9fbe76b1243ea0",
       );
     });
 

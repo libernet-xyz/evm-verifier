@@ -11,7 +11,7 @@
 use serde::Serialize;
 use starkom_bluesky::Scalar;
 use starkom_pcs::hash::Keccak256Hash;
-use starkom_plonk::starkom::proto::plonk::v11 as proto;
+use starkom_plonk::starkom::proto::plonk::v12 as proto;
 use starkom_plonk::{Circuit, CompressedCircuit, Proof};
 use std::collections::BTreeSet;
 use std::path::Path;

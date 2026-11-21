@@ -222,7 +222,7 @@ export function loadPlonkCases(directory: URL): PlonkCase[] {
 }
 
 /** The layout identifier of the SCPF data of PLONK proofs (see `PlonkVerifier`). */
-export const PLONK_LAYOUT_IDENTIFIER = keccak256(toUtf8Bytes("starkom.proto.plonk.v11.Proof"));
+export const PLONK_LAYOUT_IDENTIFIER = keccak256(toUtf8Bytes("starkom.proto.plonk.v12.Proof"));
 
 /**
  * The layout identifier of the SCPF data passed to the harnesses other than PLONK proofs (see
@@ -231,7 +231,7 @@ export const PLONK_LAYOUT_IDENTIFIER = keccak256(toUtf8Bytes("starkom.proto.plon
 export const TEST_LAYOUT_IDENTIFIER = keccak256(toUtf8Bytes("test"));
 
 /** The version of SCPF of the test vectors, i.e. of `starkom-scpf`: major, minor, and patch. */
-export const VERSION: [number, number, number] = [1, 0, 2];
+export const VERSION: [number, number, number] = [1, 0, 3];
 
 /**
  * Encodes the 64-byte header of SCPF data (see `ProofViewer`): the `SCPF` signature, the version

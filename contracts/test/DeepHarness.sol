@@ -5,9 +5,10 @@ import "../DEEP.sol";
 
 /// @dev Thin wrapper exposing DeepVerifier internals for testing.
 contract DeepHarness {
-  function domainSeparators() external pure returns (bytes32[5] memory) {
+  function domainSeparators() external pure returns (bytes32[6] memory) {
     return
       [
+        DeepVerifier.DEEP_TRANSCRIPT_DST,
         DeepVerifier.QUERY_DST0,
         DeepVerifier.QUERY_DST1,
         DeepVerifier.RLC_DST,
@@ -52,7 +53,7 @@ contract DeepHarness {
   ) external pure returns (uint256 alpha, uint256 beta) {
     return
       DeepVerifier.deepChallenges(
-        DeepVerifier.deepTranscript(options, commitment, numPolys, points)
+        DeepVerifier.deepTranscriptHash(options, commitment, numPolys, points)
       );
   }
 
@@ -65,7 +66,7 @@ contract DeepHarness {
   ) external pure returns (bytes32) {
     return
       DeepVerifier.querySeed(
-        DeepVerifier.deepTranscript(options, commitment, numPolys, points),
+        DeepVerifier.deepTranscriptHash(options, commitment, numPolys, points),
         friCommitment
       );
   }

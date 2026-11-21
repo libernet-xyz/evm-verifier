@@ -27,22 +27,51 @@ library Keccak256Hash {
   }
 
   /// @notice Hashes a Fiat-Shamir transcript.
-  /// @dev Hashes the DST, then the transcript length as a 16-byte big-endian integer, then the
+  /// @dev Hashes the DST, then the transcript length as a 32-byte big-endian integer, then the
   ///   transcript elements. Matches `Hasher::hash_transcript`.
+  ///
+  ///   The length word followed by the elements is exactly the memory layout of `transcript`, so
+  ///   rather than copying the transcript this function temporarily overwrites the word that
+  ///   precedes it with `dst`, hashes in place, and restores the original word. That word belongs
+  ///   to some other memory object (or is the free memory pointer, if `transcript` is the empty
+  ///   array at the zero slot), so the assembly block is not memory-safe, but no other code runs
+  ///   between the write and the restore.
   function hashTranscript(
     bytes32 dst,
     bytes32[] memory transcript
-  ) internal pure returns (bytes32) {
-    return keccak256(abi.encodePacked(dst, uint128(transcript.length), transcript));
+  ) internal pure returns (bytes32 result) {
+    assembly {
+      let start := sub(transcript, 0x20)
+      let saved := mload(start)
+      mstore(start, dst)
+      result := keccak256(start, add(shl(5, mload(transcript)), 0x40))
+      mstore(start, saved)
+    }
   }
 
   /// @notice Generates a Fiat-Shamir challenge from a transcript.
-  /// @dev Hashes the transcript twice, with `dst` and `dst + 1`, and reduces the 512-bit
-  ///   concatenation of the two hashes (the first one being the most significant half) modulo P.
-  ///   Matches `Hasher::challenge`.
+  /// @dev Hashes the transcript with `dst`, then hashes that hash with `dst + 1` (as a
+  ///   single-element transcript), and reduces the 512-bit concatenation of the two hashes (the
+  ///   first one being the most significant half) modulo P. Matches `Hasher::challenge`.
   function challenge(bytes32 dst, bytes32[] memory transcript) internal pure returns (uint256) {
-    uint256 high = uint256(hashTranscript(dst, transcript));
-    uint256 low = uint256(hashTranscript(bytes32(uint256(dst) + 1), transcript));
-    return addmod(mulmod(high, RANGE_MOD_P, BlueSky.P), low, BlueSky.P);
+    bytes32 high = hashTranscript(dst, transcript);
+    bytes32 low = _hashSingleElementTranscript(bytes32(uint256(dst) + 1), high);
+    return addmod(mulmod(uint256(high), RANGE_MOD_P, BlueSky.P), uint256(low), BlueSky.P);
+  }
+
+  /// @dev Same as `hashTranscript` with a transcript made of `element` alone, but without
+  ///   allocating the transcript.
+  function _hashSingleElementTranscript(
+    bytes32 dst,
+    bytes32 element
+  ) private pure returns (bytes32 result) {
+    assembly ("memory-safe") {
+      // The input is assembled in the unallocated memory past the free memory pointer.
+      let input := mload(0x40)
+      mstore(input, dst)
+      mstore(add(input, 0x20), 1)
+      mstore(add(input, 0x40), element)
+      result := keccak256(input, 0x60)
+    }
   }
 }

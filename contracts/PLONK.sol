@@ -71,7 +71,7 @@ library PlonkVerifier {
 
   /// @dev The layout identifier of the SCPF data of PLONK proofs: the Keccak-256 hash of the full
   ///   name of the `Proof` protobuf of `starkom-plonk` (see its `SCPF.md` file).
-  bytes32 constant PROOF_LAYOUT_IDENTIFIER = keccak256("starkom.proto.plonk.v11.Proof");
+  bytes32 constant PROOF_LAYOUT_IDENTIFIER = keccak256("starkom.proto.plonk.v12.Proof");
 
   /// @dev Domain separator of the transcript hash of a DEEP-FRI commitment, the hash of its batch
   ///   count and Merkle roots: `SHA3-256("starkom/deep/transcript")`. Matches the `TRANSCRIPT_DST`
