@@ -43,6 +43,6 @@
     "typescript": "~6.0.3"
   },
   "dependencies": {
-    "@starkom/bluesky-sol": "file:../bluesky-sol"
+    "@starkom/bluesky": "^1.0.3"
   }
 }

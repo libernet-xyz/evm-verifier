@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.28;
 
-import "@starkom/bluesky-sol/contracts/BlueSky.sol";
+import "@starkom/bluesky/contracts/BlueSky.sol";
 
 /// @title Keccak256Hash
 /// @notice The Keccak-256 hash backend of Starkom over the BlueSky field.
