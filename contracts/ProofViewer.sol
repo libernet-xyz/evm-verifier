@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.34;
 
 /// @notice A cursor over data encoded in SCPF, the Starkom Compact Proof Format, e.g. a PLONK
 ///   proof encoded by `starkom_plonk::Proof::to_scpf`.
