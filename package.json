@@ -7,7 +7,7 @@
     "prettier": "prettier --write \"**/*.{sol,js,jsx,mjs,cjs,ts,tsx,mts,cts}\"",
     "vectors:fri": "cargo run --release --manifest-path tools/fri-vectors/Cargo.toml > test/vectors/fri.json && prettier --write test/vectors/fri.json",
     "vectors:plonk": "cargo run --release --manifest-path tools/plonk-vectors/Cargo.toml --bin cases -- test/vectors/plonk && prettier --write test/vectors/plonk",
-    "vectors:merkle": "cargo run --release --manifest-path tools/plonk-vectors/Cargo.toml --bin merkle -- test/vectors && prettier --write test/vectors/merkle.circuit.json"
+    "vectors:merkle": "cargo run --release --manifest-path tools/plonk-vectors/Cargo.toml --bin merkle -- test/vectors/merkle && prettier --write test/vectors/merkle"
   },
   "repository": {
     "type": "git",

@@ -1,0 +1,22 @@
+{
+  "commitment": "0xdd5adc8aa393cd67d561dd5241ced8cf103948917a2795c581168e1f506f055a",
+  "pcsConfig": {
+    "degreeBound": 256,
+    "securityBits": 128,
+    "blowupLog2": 8,
+    "foldRate": 1,
+    "maxRounds": 4294967295,
+    "grindingBits": 24
+  },
+  "numColumns": 106,
+  "numGateSelectors": 7,
+  "numQuotientChunks": 8,
+  "blinded": true,
+  "rotations": [0, 1],
+  "publicCells": [
+    {
+      "row": 162,
+      "column": 101
+    }
+  ]
+}

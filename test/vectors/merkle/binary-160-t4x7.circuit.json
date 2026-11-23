@@ -1,5 +1,5 @@
 {
-  "commitment": "0x75b8cb42f35ff4f41fb95d456378be3bd277afd01cdd5111a128c4724c39e72e",
+  "commitment": "0x8f81761309bd086a8ba625c1eabdc05a41138aaa05970276731582752bbbaf6a",
   "pcsConfig": {
     "degreeBound": 256,
     "securityBits": 128,
@@ -8,15 +8,15 @@
     "maxRounds": 4294967295,
     "grindingBits": 24
   },
-  "numColumns": 95,
-  "numGateSelectors": 166,
+  "numColumns": 93,
+  "numGateSelectors": 3,
   "numQuotientChunks": 8,
   "blinded": true,
-  "rotations": [-1, 0, 1],
+  "rotations": [0, 1],
   "publicCells": [
     {
-      "row": 162,
-      "column": 91
+      "row": 160,
+      "column": 89
     }
   ]
 }

@@ -1,140 +1,264 @@
 // Copyright 2026 The Libernet Team
 // SPDX-License-Identifier: Apache-2.0
 
-//! Generates the Merkle lookup benchmark of the Solidity verifier: a PLONK proof of a lookup in a
-//! ternary Sparse Merkle Tree with 162-trit keys, proven with the Keccak-256 hash backend over the
-//! BlueSky field.
+//! Generates the Merkle lookup benchmarks of the Solidity verifier: PLONK proofs of lookups in
+//! Sparse Merkle Trees, proven with the Keccak-256 hash backend over the BlueSky field.
 //!
-//! The circuit is the one of `test_full_ternary_smt_with_large_blowup` in the `merkle` module of
-//! `starkom-gadgets` (a blinded `FullTernaryChip` with Poseidon T4X7 and a blowup factor of 256),
-//! except that it requires 24 grinding bits, so there are ceil((128 - 24) / 8) = 13 FRI queries.
-//! The tree holds the same five entries and the proof looks up the same key.
+//! The benchmarks are listed in `BENCHMARKS`:
+//!
+//! - `binary-256-t4x7`: a binary tree with 256-bit keys (`FullBinaryChip`), hashed with Poseidon1
+//!   T4X7;
+//! - `binary-160-t4x7`: a binary tree with 160-bit keys like Ethereum addresses (`BinaryChip`),
+//!   hashed with Poseidon1 T4X7;
+//! - `ternary-162-t5x7`: a ternary tree with 162-trit keys (`FullTernaryChip`), hashed with
+//!   Poseidon1 T5X7;
+//! - `ternary-102-t5x7`: a ternary tree with 102-trit keys, enough for 160 bits (`TernaryChip`),
+//!   hashed with Poseidon1 T5X7.
+//!
+//! The circuits are built like in the large blowup tests of the `merkle` module of
+//! `starkom-gadgets`, e.g. `test_full_ternary_smt_with_large_blowup`: they're blinded and have a
+//! blowup factor of 256, but they require 24 grinding bits, so there are ceil((128 - 24) / 8) = 13
+//! FRI queries. Every inner node is the `hash0` of its children with a capacity of two zero
+//! elements. All the trees hold the same five entries and the proofs look up the same key.
 //!
 //! Usage:
 //!
-//! - `cargo run --release --bin merkle -- ../../test/vectors` writes the test case `merkle` (see
-//!   `plonk_vectors::write_case`), proven with the FRI settings in `FOLD_RATE` and `MAX_ROUNDS`;
-//! - `cargo run --release --bin merkle -- sweep <directory>` writes one test case for every useful
-//!   combination of fold rate and number of rounds, to compare them with
-//!   `scripts/tune-merkle-fri.ts`.
+//! - `cargo run --release --bin merkle -- ../../test/vectors/merkle` writes the test case of every
+//!   benchmark, named after it (see `plonk_vectors::write_case`), proven with its FRI settings;
+//! - `cargo run --release --bin merkle -- sweep <benchmark> <directory>` writes one test case for
+//!   every useful combination of fold rate and number of rounds of a benchmark, to compare them
+//!   with `scripts/tune-merkle-fri.ts`.
 //!
-//! The circuit is blinded with random values, so every run generates different proofs.
+//! The circuits are blinded with random values, so every run generates different proofs.
 
-use plonk_vectors::{Hash, write_case, write_circuit, write_proof};
+use plonk_vectors::{write_case, write_circuit, write_proof, Hash};
 use primitive_types::U256;
-use starkom_bluesky::{Scalar, from_const};
+use starkom_bluesky::{from_const, Scalar};
 use starkom_ff::Field;
-use starkom_gadgets::merkle::FullTernaryChip;
+use starkom_gadgets::merkle::{BinaryChip, FullBinaryChip, FullTernaryChip, TernaryChip};
 use starkom_plonk::{
-    Cell, CellOrUnconstrained, Circuit, CircuitBuilder, CircuitOptions, CircuitView, Proof,
+    Cell, CellOrUnconstrained, Chip, Circuit, CircuitBuilder, CircuitOptions, CircuitView, Proof,
     ProofOptions, Witness, WitnessView,
 };
-use starkom_poseidon::BlueSkyConfigT4X7;
+use starkom_poseidon::{BlueSkyConfigT4X7, BlueSkyConfigT5X7};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-/// The number of FRI folds per round of the benchmark proof, chosen with
+/// A Merkle lookup benchmark.
+struct Benchmark {
+    name: &'static str,
+    /// The number of FRI folds per round of the proof.
+    fold_rate: usize,
+    /// The maximum number of FRI rounds of the proof, 0 to send the whole DEEP quotient in the
+    /// clear.
+    max_rounds: usize,
+    /// Builds the circuit and the witness of the lookup.
+    make_lookup: fn() -> Lookup,
+}
+
+/// The benchmarks, with the FRI settings of the smallest proof, measured with
 /// `scripts/tune-merkle-fri.ts`.
 ///
-/// With 1 round of 2 folds the proof was within 0.6% of the smallest proof and of the cheapest
-/// transaction, which sends the whole DEEP quotient in the clear (no rounds), but its DEEP-FRI
-/// verification was 11% cheaper (5.1M gas versus 5.8M with the production profile). That's what
-/// matters on chains without the calldata floor of EIP-7623, which determines the cost of these
-/// proofs on Ethereum.
-const FOLD_RATE: usize = 2;
+/// On Ethereum the calldata floor determines the cost of all the settings, both today (EIP-7623)
+/// and after Amsterdam (EIP-7976), so the smallest proof is also the cheapest transaction:
+///
+/// | benchmark          | FRI settings         | proof     | next smallest                   |
+/// | ------------------ | -------------------- | --------- | ------------------------------- |
+/// | `binary-256-t4x7`  | fold rate 3, 1 round | 179,020 B | fold rate 2, 1 round: +694 B    |
+/// | `binary-160-t4x7`  | no rounds            | 172,847 B | fold rate 2, 1 round: +883 B    |
+/// | `ternary-162-t5x7` | no rounds            | 192,827 B | fold rate 2, 1 round: +1,378 B  |
+/// | `ternary-102-t5x7` | no rounds            | 184,528 B | fold rate 2, 1 round: +3,052 B  |
+///
+/// The sizes of the same settings vary by about half a kilobyte between runs because the query
+/// indices are random, but the rankings above are robust: two sweeps agreed on those of the other
+/// benchmarks, and the expected sizes of a model of the proof format agree on all of them. The
+/// sweeps ran before the chips of `starkom-gadgets` reconstructed the keys with Horner's method,
+/// which removed most gate selectors and an opened point, but the differences between the FRI
+/// settings only depend on the degree bound and on the number of queries, which didn't change.
+const BENCHMARKS: [Benchmark; 4] = [
+    Benchmark {
+        name: "binary-256-t4x7",
+        fold_rate: 3,
+        max_rounds: 1,
+        make_lookup: binary_256_t4x7,
+    },
+    Benchmark {
+        name: "binary-160-t4x7",
+        fold_rate: 1,
+        max_rounds: 0,
+        make_lookup: binary_160_t4x7,
+    },
+    Benchmark {
+        name: "ternary-162-t5x7",
+        fold_rate: 1,
+        max_rounds: 0,
+        make_lookup: ternary_162_t5x7,
+    },
+    Benchmark {
+        name: "ternary-102-t5x7",
+        fold_rate: 1,
+        max_rounds: 0,
+        make_lookup: ternary_102_t5x7,
+    },
+];
 
-/// The maximum number of FRI rounds of the benchmark proof (see `FOLD_RATE`).
-const MAX_ROUNDS: usize = 1;
-
-/// The minimum number of grinding bits of the circuit, which the proofs use too.
+/// The minimum number of grinding bits of the circuits, which the proofs use too.
 const GRINDING_BITS: usize = 24;
 
-/// The height of the tree, i.e. the number of trits of its keys.
-const HEIGHT: usize = 162;
+/// The entries of all the trees, as (key, value) pairs.
+const ENTRIES: [(u64, u64); 5] = [(12, 34), (34, 56), (56, 78), (78, 90), (90, 12)];
 
-/// A node of a ternary Sparse Merkle Tree hashed with Poseidon T4X7.
+/// The key looked up in all the trees.
+const KEY: u64 = 56;
+
+/// Hashes the children of an inner node.
+type HashChildren = fn(&[Scalar]) -> Scalar;
+
+/// Hashes the children of a node of a binary tree like the chips with Poseidon1 T4X7: `hash0` with
+/// a zero capacity.
+fn hash_binary_t4x7(children: &[Scalar]) -> Scalar {
+    starkom_poseidon::hash0::<BlueSkyConfigT4X7, Scalar, 4, 2, 2>(
+        [Scalar::ZERO; 2],
+        children.iter().copied(),
+    )
+}
+
+/// Hashes the children of a node of a ternary tree like the chips with Poseidon1 T5X7: `hash0`
+/// with a zero capacity.
+fn hash_ternary_t5x7(children: &[Scalar]) -> Scalar {
+    starkom_poseidon::hash0::<BlueSkyConfigT5X7, Scalar, 5, 3, 2>(
+        [Scalar::ZERO; 2],
+        children.iter().copied(),
+    )
+}
+
+/// A node of a Sparse Merkle Tree.
+enum Node {
+    Leaf(Scalar),
+    Inner {
+        hash: Scalar,
+        children: Vec<Rc<Node>>,
+    },
+}
+
+impl Node {
+    fn hash(&self) -> Scalar {
+        match self {
+            Node::Leaf(value) => *value,
+            Node::Inner { hash, .. } => *hash,
+        }
+    }
+}
+
+fn make_inner(hash_children: HashChildren, children: Vec<Rc<Node>>) -> Rc<Node> {
+    let hashes: Vec<Scalar> = children.iter().map(|child| child.hash()).collect();
+    Rc::new(Node::Inner {
+        hash: hash_children(&hashes),
+        children,
+    })
+}
+
+/// A persistent Sparse Merkle Tree, like those of the tests of the `merkle` module of
+/// `starkom-gadgets`.
 ///
-/// Copied from the tests of the `merkle` module of `starkom-gadgets`.
-trait Node {
-    fn hash(&self) -> Scalar;
-
-    /// Returns the Merkle path of `key`, from the leaf up: every element holds the hashes of the
-    /// three children of a node.
-    fn get_merkle_path(&self, key: &U256) -> Vec<Vec<Scalar>>;
-
-    fn put(self: Rc<Self>, key: &U256, value: Scalar) -> Rc<dyn Node>;
+/// The leaves are at level 0 and the root is at level `height`. The inner nodes at level `l` pick
+/// the child of a key by its digit `l - 1` in base `arity`, so the digits are consumed from the
+/// least significant one, at the bottom of the tree.
+struct Tree {
+    arity: usize,
+    height: usize,
+    hash_children: HashChildren,
+    root: Rc<Node>,
 }
 
-struct Leaf(Scalar);
-
-impl Node for Leaf {
-    fn hash(&self) -> Scalar {
-        self.0
+impl Tree {
+    /// Returns a tree whose leaves are all zero.
+    fn new(arity: usize, height: usize, hash_children: HashChildren) -> Self {
+        let mut node = Rc::new(Node::Leaf(Scalar::ZERO));
+        for _ in 0..height {
+            node = make_inner(hash_children, vec![node; arity]);
+        }
+        Self {
+            arity,
+            height,
+            hash_children,
+            root: node,
+        }
     }
 
-    fn get_merkle_path(&self, _key: &U256) -> Vec<Vec<Scalar>> {
-        vec![]
+    /// Returns the `height` digits of `key` in base `arity`, from the least significant one.
+    fn digits(&self, key: u64) -> Vec<usize> {
+        let mut key = U256::from(key);
+        let mut digits = Vec::with_capacity(self.height);
+        for _ in 0..self.height {
+            digits.push((key % self.arity).as_usize());
+            key /= self.arity;
+        }
+        digits
     }
 
-    fn put(self: Rc<Self>, _key: &U256, value: Scalar) -> Rc<dyn Node> {
-        Rc::new(Leaf(value))
+    fn put(&mut self, key: u64, value: Scalar) {
+        let digits = self.digits(key);
+        self.root = self.put_impl(&self.root, &digits, value);
+    }
+
+    /// Returns `node` with the leaf at `digits` replaced by `value`. The last digit picks the
+    /// child of `node`.
+    fn put_impl(&self, node: &Rc<Node>, digits: &[usize], value: Scalar) -> Rc<Node> {
+        match node.as_ref() {
+            Node::Leaf(_) => Rc::new(Node::Leaf(value)),
+            Node::Inner { children, .. } => {
+                let (&digit, rest) = digits.split_last().unwrap();
+                let mut children = children.clone();
+                children[digit] = self.put_impl(&children[digit], rest, value);
+                make_inner(self.hash_children, children)
+            }
+        }
+    }
+
+    /// Returns the value of `key` and its Merkle path from the leaf up, as taken by the chips: the
+    /// hashes of all the children of every inner node of the path.
+    fn lookup(&self, key: u64) -> (Scalar, Vec<Vec<Scalar>>) {
+        let digits = self.digits(key);
+        let mut node = &self.root;
+        let mut path = Vec::with_capacity(self.height);
+        for &digit in digits.iter().rev() {
+            let Node::Inner { children, .. } = node.as_ref() else {
+                panic!("the path is longer than the tree");
+            };
+            path.push(children.iter().map(|child| child.hash()).collect());
+            node = &children[digit];
+        }
+        path.reverse();
+        (node.hash(), path)
     }
 }
 
-struct TernaryNode {
-    level: usize,
-    hash: Scalar,
-    children: [Rc<dyn Node>; 3],
+/// Builds a tree holding `ENTRIES` and looks up `KEY` in it, returning the value, the Merkle path
+/// of `KEY`, and the root hash.
+fn look_up(
+    arity: usize,
+    height: usize,
+    hash_children: HashChildren,
+) -> (Scalar, Vec<Vec<Scalar>>, Scalar) {
+    let mut tree = Tree::new(arity, height, hash_children);
+    for (key, value) in ENTRIES {
+        tree.put(key, from_const(value));
+    }
+    let (value, path) = tree.lookup(KEY);
+    (value, path, tree.root.hash())
 }
 
-impl TernaryNode {
-    fn make(level: usize, children: [Rc<dyn Node>; 3]) -> Rc<dyn Node> {
-        let hash = starkom_poseidon::hash0::<BlueSkyConfigT4X7, Scalar, 4, 3, 1>(
-            [Scalar::ZERO],
-            [children[0].hash(), children[1].hash(), children[2].hash()],
-        );
-        Rc::new(TernaryNode {
-            level,
-            hash,
-            children,
-        })
-    }
-
-    fn trit_at(&self, key: &U256) -> usize {
-        let divisor = U256::from(3).pow((self.level - 1).into());
-        ((key / divisor) % 3).try_into().unwrap()
-    }
+/// Converts a Merkle path returned by `Tree::lookup` to the array taken by the chips.
+fn to_path<const N: usize, const H: usize>(path: Vec<Vec<Scalar>>) -> [[Scalar; N]; H] {
+    path.into_iter()
+        .map(|children| children.try_into().unwrap())
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
-impl Node for TernaryNode {
-    fn hash(&self) -> Scalar {
-        self.hash
-    }
-
-    fn get_merkle_path(&self, key: &U256) -> Vec<Vec<Scalar>> {
-        let mut path = self.children[self.trit_at(key)].get_merkle_path(key);
-        path.push(self.children.iter().map(|child| child.hash()).collect());
-        path
-    }
-
-    fn put(self: Rc<Self>, key: &U256, value: Scalar) -> Rc<dyn Node> {
-        let trit = self.trit_at(key);
-        let mut children = self.children.clone();
-        children[trit] = children[trit].clone().put(key, value);
-        Self::make(self.level, children)
-    }
-}
-
-/// Returns an empty tree of the given height, whose leaves are all zero.
-fn get_empty_tree(height: usize) -> Rc<dyn Node> {
-    let mut node: Rc<dyn Node> = Rc::new(Leaf(Scalar::ZERO));
-    for level in 1..=height {
-        node = TernaryNode::make(level, [node.clone(), node.clone(), node.clone()]);
-    }
-    node
-}
-
-/// The circuit of the lookup with a valid witness.
+/// The circuit of a lookup with a valid witness.
 struct Lookup {
     circuit: Circuit<Scalar, Scalar>,
     witness: Witness<Scalar>,
@@ -143,27 +267,12 @@ struct Lookup {
 }
 
 impl Lookup {
-    /// Builds the circuit and the witness of `test_full_ternary_smt_with_large_blowup`, but with
-    /// `GRINDING_BITS` grinding bits.
-    fn new() -> Self {
-        let mut tree = get_empty_tree(HEIGHT);
-        for (key, value) in [(12, 34), (34, 56), (56, 78), (78, 90), (90, 12)] {
-            tree = tree.put(&U256::from(key), from_const(value));
-        }
-        let key = 56u64;
-        let value = from_const(78);
-        let path: [[Scalar; 3]; HEIGHT] = tree
-            .get_merkle_path(&U256::from(key))
-            .into_iter()
-            .map(|entry| entry.try_into().unwrap())
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-
-        let chip = FullTernaryChip::<Scalar, BlueSkyConfigT4X7>::new(path);
+    /// Builds the circuit of a lookup with `chip`, which declares the root hash public, and its
+    /// witness for `KEY` and its `value`.
+    fn new(chip: &impl Chip<Scalar, 2, 1>, value: Scalar, expected_root_hash: Scalar) -> Self {
         let mut builder = CircuitBuilder::default();
         let inputs = [builder.cell(0, 0).into(), builder.cell(0, 1).into()];
-        let [root_hash] = builder.sub_chip(1, 0, &chip, inputs).unwrap();
+        let [root_hash] = builder.sub_chip(1, 0, chip, inputs).unwrap();
         builder.declare_public_cells([root_hash.unwrap()]);
         let circuit = builder
             .build(CircuitOptions {
@@ -177,10 +286,10 @@ impl Lookup {
 
         let mut witness = circuit.make_witness();
         let inputs = [witness.cell(0, 0), witness.cell(0, 1)];
-        witness.set(inputs[0], from_const(key));
+        witness.set(inputs[0], from_const(KEY));
         witness.set(inputs[1], value);
         let [root_hash] = witness
-            .sub_chip(1, 0, &chip, inputs.map(CellOrUnconstrained::Cell))
+            .sub_chip(1, 0, chip, inputs.map(CellOrUnconstrained::Cell))
             .unwrap();
         let root_hash_cell = match root_hash {
             CellOrUnconstrained::Cell(cell) => cell,
@@ -191,12 +300,36 @@ impl Lookup {
             circuit,
             witness,
             root_hash_cell,
-            expected_root_hash: tree.hash(),
+            expected_root_hash,
         }
     }
 }
 
-/// Proves the lookup with the given FRI settings.
+fn binary_256_t4x7() -> Lookup {
+    let (value, path, root_hash) = look_up(2, 256, hash_binary_t4x7);
+    let chip = FullBinaryChip::<Scalar, BlueSkyConfigT4X7>::new(to_path(path));
+    Lookup::new(&chip, value, root_hash)
+}
+
+fn binary_160_t4x7() -> Lookup {
+    let (value, path, root_hash) = look_up(2, 160, hash_binary_t4x7);
+    let chip = BinaryChip::<Scalar, 160, BlueSkyConfigT4X7>::new(to_path(path));
+    Lookup::new(&chip, value, root_hash)
+}
+
+fn ternary_162_t5x7() -> Lookup {
+    let (value, path, root_hash) = look_up(3, 162, hash_ternary_t5x7);
+    let chip = FullTernaryChip::<Scalar, BlueSkyConfigT5X7>::new(to_path(path));
+    Lookup::new(&chip, value, root_hash)
+}
+
+fn ternary_102_t5x7() -> Lookup {
+    let (value, path, root_hash) = look_up(3, 102, hash_ternary_t5x7);
+    let chip = TernaryChip::<Scalar, 102, BlueSkyConfigT5X7>::new(to_path(path));
+    Lookup::new(&chip, value, root_hash)
+}
+
+/// Proves the lookup with the given FRI settings, checking the root hash with the Rust verifier.
 fn prove(lookup: &Lookup, fold_rate: usize, max_rounds: usize) -> Proof<Scalar, Scalar, Hash> {
     let options = ProofOptions {
         fri_fold_rate: fold_rate,
@@ -214,9 +347,13 @@ fn prove(lookup: &Lookup, fold_rate: usize, max_rounds: usize) -> Proof<Scalar, 
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let lookup = Lookup::new();
     match arguments.as_slice() {
-        [command, directory] if command == "sweep" => {
+        [command, name, directory] if command == "sweep" => {
+            let benchmark = BENCHMARKS
+                .iter()
+                .find(|benchmark| benchmark.name == name)
+                .unwrap_or_else(|| panic!("unknown benchmark {name}"));
+            let lookup = (benchmark.make_lookup)();
             // Every number of rounds from 1 to the largest one for every fold rate, plus no rounds
             // at all, where the fold rate doesn't matter.
             let directory = PathBuf::from(directory);
@@ -239,9 +376,15 @@ fn main() {
             }
         }
         [directory] => {
-            let proof = prove(&lookup, FOLD_RATE, MAX_ROUNDS);
-            write_case(&PathBuf::from(directory), "merkle", &lookup.circuit, &proof);
+            let directory = PathBuf::from(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            for benchmark in &BENCHMARKS {
+                eprintln!("proving {}", benchmark.name);
+                let lookup = (benchmark.make_lookup)();
+                let proof = prove(&lookup, benchmark.fold_rate, benchmark.max_rounds);
+                write_case(&directory, benchmark.name, &lookup.circuit, &proof);
+            }
         }
-        _ => panic!("usage: merkle <directory> | merkle sweep <directory>"),
+        _ => panic!("usage: merkle <directory> | merkle sweep <benchmark> <directory>"),
     }
 }
