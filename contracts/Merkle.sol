@@ -30,8 +30,7 @@ library Merkle {
   uint256 constant BASE_LEAF_DST =
     0x2e704cc1e66fb23985c37d2b9530ed50c0e48ae8fa82f63fd25fe7f78bb23a89;
 
-  /// @dev Hashes `dst`, then `count`, then the `count` 32-byte words at calldata offset
-  ///   `offset`.
+  /// @dev Hashes `dst`, then `count`, then the `count` 32-byte words at calldata offset `offset`.
   function _hashLeaf(
     uint256 dst,
     uint256 offset,
@@ -47,8 +46,8 @@ library Merkle {
     }
   }
 
-  /// @notice Hashes a leaf of a Merkle tree of polynomials over the extension field, whose
-  ///   values are the `count` 32-byte words at calldata offset `offset`.
+  /// @notice Hashes a leaf of a Merkle tree of polynomials over the extension field, whose values
+  ///   are the `count` 32-byte words at calldata offset `offset`.
   /// @dev Hashes `LEAF_DST`, then the number of values, then the values. Matches
   ///   `WideLeafHasher::hash`: BlueSky is a prime field, so every evaluation is a single value.
   function hashLeaf(uint256 offset, uint256 count) internal pure returns (bytes32) {
@@ -63,8 +62,8 @@ library Merkle {
     return _hashLeaf(BASE_LEAF_DST, offset, count);
   }
 
-  /// @notice Verifies the Merkle proof of a leaf of a tree of polynomials over the extension
-  ///   field, reverting if it's invalid.
+  /// @notice Verifies the Merkle proof of a leaf of a tree of polynomials over the extension field,
+  ///   reverting if it's invalid.
   /// @dev Matches `Proof::verify`. The leaf values are the `count` words at calldata offset
   ///   `offset`, and the `height` sibling hashes of the Merkle path are read from `viewer`.
   /// @param index The leaf index, which determines the left/right position at each level.
@@ -83,9 +82,9 @@ library Merkle {
   /// @notice Recomputes a Merkle root from a leaf and its Merkle path, and checks it against
   ///   `rootHash`, reverting if they differ.
   /// @dev Matches `merkle::verify_path`. `leaf` is the hash of the leaf values for vector leaves,
-  ///   or the leaf itself for trees whose leaves are single 32-byte values, like the FRI ones.
-  ///   The `height` sibling hashes of the path, from the leaf up to but excluding the root, are
-  ///   read from `viewer`.
+  ///   or the leaf itself for trees whose leaves are single 32-byte values, like the FRI ones. The
+  ///   `height` sibling hashes of the path, from the leaf up to but excluding the root, are read
+  ///   from `viewer`.
   /// @param index The leaf index, which determines the left/right position at each level.
   /// @param rootHash The expected Merkle root.
   function verifyPath(
