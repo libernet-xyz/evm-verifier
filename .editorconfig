@@ -3,4 +3,4 @@ root=true
 [*]
 max_line_length=100
 indent_style=space
-indent_style=2
+indent_size=2

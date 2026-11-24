@@ -1,327 +1,606 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import type { FriHarness } from "../types/ethers-contracts";
+import type { FriHarness, Keccak256HashHarness } from "../types/ethers-contracts/index.js";
+import {
+  encodeFriQueries,
+  type FriCommitment,
+  type FriOptions,
+  type FriQuery,
+  loadFriCases,
+} from "./vectors.js";
 
 const { ethers } = await network.create();
 
-const LEAF_DST =
-  0x6ade565de4068c14b708c2aeb582b747d8159fd173dd4ecb32ef2d54683e2cfen;
-const TREE_DST =
-  0x17a4e1d7f96a99904bcf07467db89f654d651724f57c477d41c52418c3aa6783n;
-const FOLD_DST =
-  0x21e331ad95b69e952c269e82b37c9e470942d5379584f7a0e311481b7ad77942n;
+const P = 0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547c000000000000001n;
+
+/** `MAX_FRI_ROUNDS`, which stands for no limit on the number of rounds. */
+const UNLIMITED = 2n ** 32n - 1n;
+
+const cases = loadFriCases();
+
+function findCase(name: string) {
+  return cases.find((testCase) => testCase.name === name)!;
+}
+
+// Same setup as the unit tests in `starkom_pcs::fri`.
+const honest = findCase("polynomial of degree 7");
+const foreign = findCase("foreign polynomial of degree 7");
+const OPTIONS: FriOptions = honest.options;
+const QUERY_INDEX = 3;
+
+function honestQuery(index: number = QUERY_INDEX): FriQuery {
+  return structuredClone(honest.queries[index]);
+}
+
+function honestCommitment(): FriCommitment {
+  return structuredClone(honest.commitment);
+}
+
+/** Reverses the order of the lowest `numBits` bits of `index`, like `FriVerifier.reverseBits`. */
+function reverseBits(index: bigint, numBits: bigint): bigint {
+  let result = 0n;
+  for (let i = 0n; i < numBits; i++) {
+    result = (result << 1n) | (index & 1n);
+    index >>= 1n;
+  }
+  return result;
+}
+
+/**
+ * Returns the position of the value at the queried index within the pair opened by
+ * `honestQuery()` in the given round.
+ */
+function queriedOffset(round: number): number {
+  const k = BigInt(OPTIONS.degreeBound.toString(2).length - 1) + OPTIONS.blowupLog2 - BigInt(round);
+  const index = BigInt(QUERY_INDEX) % (1n << k);
+  return Number(reverseBits(index, k) & 1n);
+}
 
 describe("FRI verifier", function () {
   let harness: FriHarness;
+  let hashHarness: Keccak256HashHarness;
 
   before(async function () {
     harness = await ethers.deployContract("FriHarness");
+    hashHarness = await ethers.deployContract("Keccak256HashHarness");
   });
 
-  describe("hashRaw", function () {
-    it("hashRaw(LEAF_DST, 0, 0)", async function () {
-      const result = await harness.hashRaw(LEAF_DST, 0n, 0n);
-      expect(result).to.equal(
-        0x571d3849117e7fafbde7801724e1900c175ccfc708d75f50f02f5c6fafd06fdan,
-      );
-    });
+  function verify(
+    query: FriQuery,
+    commitment: FriCommitment,
+    value: bigint = honest.values[QUERY_INDEX],
+    options: FriOptions = OPTIONS,
+    transcriptHash: string = honest.transcriptHash,
+  ) {
+    return harness.verifyQuery(
+      options,
+      transcriptHash,
+      encodeFriQueries([query]),
+      query.index,
+      commitment,
+      value,
+    );
+  }
 
-    it("hashRaw(TREE_DST, 1, 2)", async function () {
-      const result = await harness.hashRaw(TREE_DST, 1n, 2n);
-      expect(result).to.equal(
-        0x6519579ba6f4d6a6649dae10bbca64894738206376f9a458b7ceeb810ec40cc3n,
-      );
-    });
-
-    it("hashRaw(FOLD_DST, 1, 0)", async function () {
-      const result = await harness.hashRaw(FOLD_DST, 1n, 0n);
-      expect(result).to.equal(
-        0x0e6a745bb7169bc2b785ef55471ffe752491b016e6422122ffb0b217f2b328a5n,
-      );
-    });
-  });
-
-  describe("hashLeaf", function () {
-    it("hashLeaf([1])", async function () {
-      const result = await harness.hashLeaf([1n]);
-      expect(result).to.equal(
-        0x18cf5ad5fe14a4dfa6cb167d0ec8102a6c22b1ea58f46ddbbd373fb7c4e78bccn,
-      );
-    });
-
-    it("hashLeaf([1, 2])", async function () {
-      const result = await harness.hashLeaf([1n, 2n]);
-      expect(result).to.equal(
-        0x6da6b0bc432398d18018395009f515cdb2b4150c31f0f2bd90167eea00900d3bn,
-      );
-    });
-
-    it("hashLeaf([42])", async function () {
-      const result = await harness.hashLeaf([42n]);
-      expect(result).to.equal(
-        0x4bf291c4bd06923e759bf21f700984c36bc28244293980f936656e823662c834n,
+  describe("FOLD_DST", function () {
+    // From `starkom_pcs::fri::tests::test_fold_dst`.
+    it("matches the Rust implementation", async function () {
+      expect(await harness.foldDst()).to.equal(
+        "0x9ffd3556faeb2cae194ce95adf6b3580f590504daa0dea56966ce4ef233844af",
       );
     });
   });
 
-  describe("verifyMerklePath", function () {
-    // From the constant polynomial proof (n=2, leaf=[42], sibling=hashLeaf([42])).
-    const LEAF_42_HASH =
-      0x4bf291c4bd06923e759bf21f700984c36bc28244293980f936656e823662c834n;
-    const ROOT_N2 =
-      0x035a6f1b94f6137e7e6a553b50225ab1bae5fc2630dfcb27db0220642ebefff2n;
-
-    it("valid left proof at index 0", async function () {
-      const result = await harness.verifyMerklePath(
-        { leaf: [42n], path: [LEAF_42_HASH] },
-        0n,
-        ROOT_N2,
-      );
-      expect(result).to.equal(true);
-    });
-
-    it("valid right proof at index 1", async function () {
-      const result = await harness.verifyMerklePath(
-        { leaf: [42n], path: [LEAF_42_HASH] },
-        1n,
-        ROOT_N2,
-      );
-      expect(result).to.equal(true);
-    });
-
-    it("wrong leaf value returns false", async function () {
-      const result = await harness.verifyMerklePath(
-        { leaf: [99n], path: [LEAF_42_HASH] },
-        0n,
-        ROOT_N2,
-      );
-      expect(result).to.equal(false);
-    });
-
-    it("wrong root returns false", async function () {
-      const result = await harness.verifyMerklePath(
-        { leaf: [42n], path: [LEAF_42_HASH] },
-        0n,
-        ROOT_N2 + 1n,
-      );
-      expect(result).to.equal(false);
-    });
-  });
-
-  describe("isConstant", function () {
-    const LEAF_42_HASH =
-      0x4bf291c4bd06923e759bf21f700984c36bc28244293980f936656e823662c834n;
-
-    it("constant leaf returns true", async function () {
-      const result = await harness.isConstant({
-        leaf: [42n],
-        path: [LEAF_42_HASH],
+  // Same cases as `starkom_pcs::fri::tests::test_reverse_*`.
+  describe("reverseBits", function () {
+    const cases: [bigint, bigint, bigint][] = [
+      [0n, 0n, 0n],
+      [0n, 1n, 0n],
+      [1n, 1n, 1n],
+      [0b000n, 3n, 0b000n],
+      [0b001n, 3n, 0b100n],
+      [0b011n, 3n, 0b110n],
+      [0b101n, 3n, 0b101n],
+      [0b110n, 3n, 0b011n],
+      [0b1n, 62n, 1n << 61n],
+      [0b1011n, 62n, 0b1101n << 58n],
+      [ethers.MaxUint256, 256n, ethers.MaxUint256],
+    ];
+    for (const [index, numBits, expected] of cases) {
+      it(`reverseBits(${index}, ${numBits}) = ${expected}`, async function () {
+        expect(await harness.reverseBits(index, numBits)).to.equal(expected);
       });
-      expect(result).to.equal(true);
-    });
+    }
+  });
 
-    it("non-constant leaf returns false", async function () {
-      // Different sibling hash means the partner has a different value.
-      const result = await harness.isConstant({
-        leaf: [42n],
-        path: [LEAF_42_HASH + 1n],
+  // Same cases as `starkom_pcs::fri::tests::test_num_rounds_*`.
+  describe("numRounds", function () {
+    const cases: [bigint, bigint, bigint, bigint][] = [
+      [1n, 1n, UNLIMITED, 0n],
+      [8n, 1n, UNLIMITED, 3n],
+      [64n, 3n, UNLIMITED, 2n],
+      [16384n, 3n, UNLIMITED, 4n],
+      [8n, 1n, 0n, 0n],
+      [8n, 1n, 2n, 2n],
+      [16384n, 3n, 2n, 2n],
+      [16384n, 3n, 4n, 4n],
+      [16384n, 3n, 5n, 4n],
+      [4n, 3n, UNLIMITED, 0n],
+      [128n, 8n, UNLIMITED, 0n],
+      [8n, 1n, ethers.MaxUint256, 3n],
+    ];
+    for (const [degreeBound, foldRate, maxRounds, expected] of cases) {
+      it(`numRounds(${degreeBound}, ${foldRate}, ${maxRounds}) = ${expected}`, async function () {
+        expect(await harness.numRounds(degreeBound, foldRate, maxRounds)).to.equal(expected);
       });
-      expect(result).to.equal(false);
-    });
+    }
+  });
 
-    it("empty path is trivially constant", async function () {
-      const result = await harness.isConstant({ leaf: [42n], path: [] });
-      expect(result).to.equal(true);
+  describe("foldingChallenge", function () {
+    it("is the challenge of the previous challenge and the root with FOLD_DST", async function () {
+      const previous = "0x" + "12".repeat(32);
+      for (const root of honest.commitment.roots) {
+        expect(await harness.foldingChallenge(previous, root)).to.equal(
+          await hashHarness.challenge(await harness.foldDst(), [previous, root]),
+        );
+      }
     });
   });
 
-  describe("verifyQuery", function () {
-    // Test vector 1: constant polynomial f(x)=42, degree_bound=1, blowup=1 => n=2, 1 round.
-    it("constant polynomial (n=2, index=0)", async function () {
-      const LEAF_42_HASH =
-        0x4bf291c4bd06923e759bf21f700984c36bc28244293980f936656e823662c834n;
-      await harness.verifyQuery(
-        {
-          n: 2n,
-          index: 0n,
-          rounds: [
-            {
-              left: { leaf: [42n], path: [LEAF_42_HASH] },
-              right: { leaf: [42n], path: [LEAF_42_HASH] },
-            },
-          ],
-        },
-        {
-          roots: [
-            0x035a6f1b94f6137e7e6a553b50225ab1bae5fc2630dfcb27db0220642ebefff2n,
-          ],
-        },
-      );
+  describe("foldingChallenges", function () {
+    it("chains every challenge to the previous one", async function () {
+      const { roots } = honest.commitment;
+      const challenges = await harness.foldingChallenges(honest.transcriptHash, roots);
+      expect(challenges).to.deep.equal([
+        await harness.foldingChallenge(honest.transcriptHash, roots[0]),
+        await harness.foldingChallenge(ethers.toBeHex(challenges[0], 32), roots[1]),
+        await harness.foldingChallenge(ethers.toBeHex(challenges[1], 32), roots[2]),
+      ]);
     });
 
-    // Test vector 2: degree-1 polynomial f(x)=1+x, degree_bound=2, blowup=1 => n=4, 2 rounds.
-    it("degree-1 polynomial 1+x (n=4, index=0)", async function () {
-      await harness.verifyQuery(
-        {
-          n: 4n,
-          index: 0n,
-          rounds: [
-            {
-              left: {
-                leaf: [
-                  0x0000000000000000000000000000000000000000000000000000000000000006n,
-                ],
-                path: [
-                  0x50a6531d16e3c5e10bd3120ec203ac9aee667d5398a3a33eb0967e027912fcc7n,
-                  0x0dda3d045e041a7a31b6b743afd9bcae377ddf8d3a0fe3145762d88abd9e8ba9n,
-                ],
-              },
-              right: {
-                leaf: [
-                  0x7ffffffffffffffffffffffffffffffe0673ddf29e9b5547bffffffffffffffdn,
-                ],
-                path: [
-                  0x0e47bc08330c07d74100e594c2a3582828678dba021860205b5617ee97685c3an,
-                  0x6669dde68e81aeab93771ac0f37f8c31bdb07c7833fb4252420d21d233edfe71n,
-                ],
-              },
-            },
-            {
-              left: {
-                leaf: [
-                  0x26f4e52b036b62580e44bd56e11740a406496ec3a9b1643ee060015d501216edn,
-                ],
-                path: [
-                  0x3249c79b94d054228a48302249313261ceeb960354045b103573c469c1360cb5n,
-                ],
-              },
-              right: {
-                leaf: [
-                  0x26f4e52b036b62580e44bd56e11740a406496ec3a9b1643ee060015d501216edn,
-                ],
-                path: [
-                  0x3249c79b94d054228a48302249313261ceeb960354045b103573c469c1360cb5n,
-                ],
-              },
-            },
-          ],
-        },
-        {
-          roots: [
-            0x43de85c84abd2a4d099e35227ee3c3369b11141ab63a5234bb7bd11cea5bebe7n,
-            0x18ded41f57a72da7d64ff3d3628fdbfbf5c573b92b65d24d6d0488e18a80b3a0n,
-          ],
-        },
-      );
+    it("returns no challenges without rounds", async function () {
+      expect(await harness.foldingChallenges(honest.transcriptHash, [])).to.deep.equal([]);
+    });
+  });
+
+  describe("encodes queries like the Rust implementation", function () {
+    for (const { name, queries, scpf } of cases) {
+      it(name, function () {
+        expect(encodeFriQueries(queries)).to.equal(scpf);
+      });
+    }
+  });
+
+  describe("accepts honest proofs", function () {
+    for (const { name, options, transcriptHash, commitment, queries, values, scpf } of cases) {
+      const maxRounds = options.maxRounds === UNLIMITED ? "unlimited" : `${options.maxRounds}`;
+      const description =
+        `${name} (degree bound ${options.degreeBound}, blowup 2^${options.blowupLog2}, ` +
+        `fold rate ${options.foldRate}, max rounds ${maxRounds}, ` +
+        `${commitment.roots.length} rounds, all ${queries.length} queries)`;
+      it(description, async function () {
+        await harness.verifyQueries(
+          options,
+          transcriptHash,
+          scpf,
+          queries.map((query) => query.index),
+          commitment,
+          values,
+        );
+      });
+    }
+  });
+
+  // Mirrors the rejection tests in `starkom_pcs::fri::tests`.
+  describe("rejects tampered proofs like the Rust implementation", function () {
+    it("accepts the untampered proof", async function () {
+      await verify(honestQuery(), honestCommitment());
     });
 
-    // Test vector 3: two polynomials [1+2x, 3+4x], degree_bound=2, blowup=1 => n=4, index=1.
-    it("two polynomials [1+2x, 3+4x] (n=4, index=1)", async function () {
-      await harness.verifyQuery(
-        {
-          n: 4n,
-          index: 1n,
-          rounds: [
-            {
-              left: {
-                leaf: [
-                  0x4fa7b9c7cb2c7e1b38f5285ac3e6bc986c416ce937516a72420d97fb839e6been,
-                  0x1f4f738f9658fc3671ea50b587cd7932d20efbdfd0077f9cc41b2ff7073cd7dcn,
-                ],
-                path: [
-                  0x1110bf02d50a47158acdf4e17cb73c56f4575a2a87924a597472c9ee6fa8245en,
-                  0x659ef99a2a9001661eebf38dec6757a618a239b11793760a2b2536a21e49cd30n,
-                ],
-              },
-              right: {
-                leaf: [
-                  0x3058463834d381e4c70ad7a53c1943659a3271096749ead57df268047c619415n,
-                  0x60b08c7069a703c98e15af4a783286cb3464e212ce93d5aafbe4d008f8c3282bn,
-                ],
-                path: [
-                  0x4fe0f38a9284483be76b9b11a1dcd95a486b51a9ad83c1711b69dd80fbead4f7n,
-                  0x3feca46ce45d8b1d9f26c602a02a1ee2c51d9edd9155ea4f48189356de22562cn,
-                ],
-              },
-            },
-            {
-              left: {
-                leaf: [
-                  0x39e49204bc4982eec575f953c3bb62d148e8fea239e8182b2238c0bf7307935en,
-                  0x73c92409789305dd8aebf2a78776c5a291d1fd4473d030564471817ee60f26bdn,
-                ],
-                path: [
-                  0x3ee42b10d42af7c0674721209933ff550f5065e7e5b3e613b4b388208375161dn,
-                ],
-              },
-              right: {
-                leaf: [
-                  0x39e49204bc4982eec575f953c3bb62d148e8fea239e8182b2238c0bf7307935en,
-                  0x73c92409789305dd8aebf2a78776c5a291d1fd4473d030564471817ee60f26bdn,
-                ],
-                path: [
-                  0x3ee42b10d42af7c0674721209933ff550f5065e7e5b3e613b4b388208375161dn,
-                ],
-              },
-            },
-          ],
-        },
-        {
-          roots: [
-            0x72b57ebcc1237ab6a1de42733fccf8d08f2b66ee7dd5247bbf378d10c69b4c65n,
-            0x7c8ab83415bda8b11fd5d4e666dfd7ab53eb9595fa0741d9ae0436e5c968c21an,
-          ],
-        },
-      );
-    });
-
-    it("rejects tampered leaf value", async function () {
-      const LEAF_42_HASH =
-        0x4bf291c4bd06923e759bf21f700984c36bc28244293980f936656e823662c834n;
+    it("rejects a foreign commitment", async function () {
       await expect(
-        harness.verifyQuery(
-          {
-            n: 2n,
-            index: 0n,
-            rounds: [
-              {
-                left: { leaf: [43n], path: [LEAF_42_HASH] },
-                right: { leaf: [42n], path: [LEAF_42_HASH] },
-              },
-            ],
-          },
-          {
-            roots: [
-              0x035a6f1b94f6137e7e6a553b50225ab1bae5fc2630dfcb27db0220642ebefff2n,
-            ],
-          },
-        ),
-      ).to.be.revertedWithCustomError(harness, "InvalidFriQuery");
+        verify(honestQuery(), structuredClone(foreign.commitment)),
+      ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
 
-    it("rejects tampered root hash", async function () {
-      const LEAF_42_HASH =
-        0x4bf291c4bd06923e759bf21f700984c36bc28244293980f936656e823662c834n;
+    it("rejects another transcript hash", async function () {
+      // Same as `test_reject_other_transcript_hash`: the first round folds with the wrong
+      // challenge, so its result doesn't match the queried value of the second round.
       await expect(
-        harness.verifyQuery(
-          {
-            n: 2n,
-            index: 0n,
-            rounds: [
-              {
-                left: { leaf: [42n], path: [LEAF_42_HASH] },
-                right: { leaf: [42n], path: [LEAF_42_HASH] },
-              },
-            ],
-          },
-          {
-            roots: [
-              0x035a6f1b94f6137e7e6a553b50225ab1bae5fc2630dfcb27db0220642ebefff2n +
-                1n,
-            ],
-          },
+        verify(
+          honestQuery(),
+          honestCommitment(),
+          honest.values[QUERY_INDEX],
+          OPTIONS,
+          "0x" + "6f".repeat(32),
         ),
-      ).to.be.revertedWithCustomError(harness, "InvalidFriQuery");
+      ).to.be.revertedWithCustomError(harness, "LeafValueMismatch");
+    });
+
+    it("rejects a corrupted root", async function () {
+      const commitment = honestCommitment();
+      commitment.roots[2] = "0x" + "aa".repeat(32);
+      await expect(verify(honestQuery(), commitment)).to.be.revertedWithCustomError(
+        harness,
+        "RootHashMismatch",
+      );
+    });
+
+    it("rejects truncated folds", async function () {
+      const query = honestQuery();
+      query.folds = query.folds.slice(0, 2);
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
+    });
+
+    it("rejects a truncated commitment", async function () {
+      const commitment = honestCommitment();
+      commitment.roots = commitment.roots.slice(0, 2);
+      await expect(verify(honestQuery(), commitment)).to.be.revertedWithCustomError(
+        harness,
+        "WrongNumberOfFoldingRounds",
+      );
+    });
+
+    it("rejects extra folds", async function () {
+      const query = honestQuery();
+      query.folds.push(structuredClone(query.folds[query.folds.length - 1]));
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "TrailingData",
+      );
+    });
+
+    it("rejects folding stopped early", async function () {
+      const query = honestQuery();
+      query.folds = query.folds.slice(0, 2);
+      const commitment = honestCommitment();
+      commitment.roots = commitment.roots.slice(0, 2);
+      await expect(verify(query, commitment)).to.be.revertedWithCustomError(
+        harness,
+        "WrongNumberOfFoldingRounds",
+      );
+    });
+
+    it("rejects a tampered folded polynomial", async function () {
+      const commitment = honestCommitment();
+      commitment.foldedPolynomial[0] = (commitment.foldedPolynomial[0] + 1n) % P;
+      await expect(verify(honestQuery(), commitment)).to.be.revertedWithCustomError(
+        harness,
+        "FoldedPolynomialMismatch",
+      );
+    });
+
+    it("rejects an oversized folded polynomial", async function () {
+      const commitment = honestCommitment();
+      commitment.foldedPolynomial.push(0n);
+      await expect(verify(honestQuery(), commitment))
+        .to.be.revertedWithCustomError(harness, "InvalidFoldedPolynomialSize")
+        .withArgs(2n, 1n);
+    });
+
+    it("rejects an oversized folded polynomial without rounds", async function () {
+      const testCase = findCase("polynomial of degree 7 without rounds");
+      const commitment = structuredClone(testCase.commitment);
+      commitment.foldedPolynomial.push(0n);
+      await expect(
+        verify(
+          structuredClone(testCase.queries[QUERY_INDEX]),
+          commitment,
+          testCase.values[QUERY_INDEX],
+          testCase.options,
+        ),
+      )
+        .to.be.revertedWithCustomError(harness, "InvalidFoldedPolynomialSize")
+        .withArgs(9n, 8n);
+    });
+
+    it("accepts a trimmed folded polynomial", async function () {
+      // The polynomial has degree less than 2, so after one round its folded polynomial has 4
+      // coefficients of which only the first is non-zero. A shorter folded polynomial proves a
+      // stronger degree bound.
+      const testCase = findCase("low-degree polynomial with one round");
+      const commitment = structuredClone(testCase.commitment);
+      expect(commitment.foldedPolynomial.slice(1)).to.deep.equal([0n, 0n, 0n]);
+      commitment.foldedPolynomial = commitment.foldedPolynomial.slice(0, 1);
+      await verify(
+        structuredClone(testCase.queries[QUERY_INDEX]),
+        commitment,
+        testCase.values[QUERY_INDEX],
+        testCase.options,
+      );
+    });
+
+    it("rejects a wrong proof height", async function () {
+      const query = honestQuery();
+      query.folds[0] = honestQuery().folds[1];
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
+    });
+
+    it("rejects a wrong value", async function () {
+      const value = (honest.values[QUERY_INDEX] + 1n) % P;
+      await expect(verify(honestQuery(), honestCommitment(), value)).to.be.revertedWithCustomError(
+        harness,
+        "LeafValueMismatch",
+      );
+    });
+
+    it("rejects a wrong value without rounds", async function () {
+      const testCase = findCase("polynomial of degree 7 without rounds");
+      const value = (testCase.values[QUERY_INDEX] + 1n) % P;
+      await expect(
+        verify(
+          structuredClone(testCase.queries[QUERY_INDEX]),
+          structuredClone(testCase.commitment),
+          value,
+          testCase.options,
+        ),
+      ).to.be.revertedWithCustomError(harness, "FoldedPolynomialMismatch");
+    });
+
+    it("rejects swapped partners", async function () {
+      const query = honestQuery();
+      query.folds[0].coset.reverse();
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "LeafValueMismatch",
+      );
+    });
+
+    it("rejects a tampered partner", async function () {
+      const query = honestQuery();
+      const coset = query.folds[1].coset;
+      const offset = queriedOffset(1) ^ 1;
+      coset[offset] = (coset[offset] + 1n) % P;
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "RootHashMismatch",
+      );
+    });
+
+    it("rejects a foreign leaf proof", async function () {
+      const query = honestQuery();
+      query.folds[1] = honestQuery(QUERY_INDEX + 4).folds[1];
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "LeafValueMismatch",
+      );
+    });
+
+    it("rejects an out-of-range query index", async function () {
+      const query = honestQuery();
+      query.index = OPTIONS.degreeBound << OPTIONS.blowupLog2;
+      await expect(verify(query, honestCommitment()))
+        .to.be.revertedWithCustomError(harness, "InvalidQueryIndex")
+        .withArgs(32n, 32n);
+    });
+
+    describe("with fold rate 3", function () {
+      // The queried value of index 3 is at position 48 = 0b110000 of the first tree, that is at
+      // offset 0 of its coset.
+      const testCase = findCase("polynomial of degree 15 with fold rate 3");
+
+      function verifyCoset(query: FriQuery, options: FriOptions = testCase.options) {
+        return verify(
+          query,
+          structuredClone(testCase.commitment),
+          testCase.values[QUERY_INDEX],
+          options,
+        );
+      }
+
+      it("accepts the untampered proof", async function () {
+        await verifyCoset(structuredClone(testCase.queries[QUERY_INDEX]));
+      });
+
+      it("rejects a tampered coset leaf", async function () {
+        const query = structuredClone(testCase.queries[QUERY_INDEX]);
+        query.folds[0].coset[4] = (query.folds[0].coset[4] + 1n) % P;
+        await expect(verifyCoset(query)).to.be.revertedWithCustomError(harness, "RootHashMismatch");
+      });
+
+      it("rejects swapped coset leaves", async function () {
+        const query = structuredClone(testCase.queries[QUERY_INDEX]);
+        const coset = query.folds[0].coset;
+        [coset[1], coset[2]] = [coset[2], coset[1]];
+        await expect(verifyCoset(query)).to.be.revertedWithCustomError(harness, "RootHashMismatch");
+      });
+
+      it("rejects a wrong fold rate", async function () {
+        const options = { ...testCase.options, foldRate: 2n };
+        await expect(
+          verifyCoset(structuredClone(testCase.queries[QUERY_INDEX]), options),
+        ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
+      });
+    });
+
+    it("rejects a query with the wrong fold rate", async function () {
+      await expect(
+        verify(honestQuery(), honestCommitment(), honest.values[QUERY_INDEX], {
+          ...OPTIONS,
+          foldRate: 3n,
+        }),
+      ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
+    });
+  });
+
+  // Checks performed by `Query::from_proto` and `Proof::from_proto` in the Rust implementation.
+  describe("rejects malformed queries like `from_proto`", function () {
+    function verifyWith(options: Partial<FriOptions>) {
+      return verify(honestQuery(), honestCommitment(), honest.values[QUERY_INDEX], {
+        ...OPTIONS,
+        ...options,
+      });
+    }
+
+    it("rejects a zero degree bound", async function () {
+      await expect(verifyWith({ degreeBound: 0n }))
+        .to.be.revertedWithCustomError(harness, "InvalidDegreeBound")
+        .withArgs(0n);
+    });
+
+    it("rejects a degree bound that is not a power of 2", async function () {
+      await expect(verifyWith({ degreeBound: 6n }))
+        .to.be.revertedWithCustomError(harness, "InvalidDegreeBound")
+        .withArgs(6n);
+    });
+
+    it("rejects a zero blowup factor", async function () {
+      await expect(verifyWith({ blowupLog2: 0n })).to.be.revertedWithCustomError(
+        harness,
+        "InvalidBlowupFactor",
+      );
+    });
+
+    it("rejects a zero fold rate", async function () {
+      await expect(verifyWith({ foldRate: 0n })).to.be.revertedWithCustomError(
+        harness,
+        "InvalidFoldRate",
+      );
+    });
+
+    it("rejects a domain that exceeds the 2-adicity of the field", async function () {
+      await expect(verifyWith({ degreeBound: 2n ** 60n, blowupLog2: 3n }))
+        .to.be.revertedWithCustomError(harness, "DomainTooLarge")
+        .withArgs(60n, 3n);
+    });
+
+    it("accepts a domain as large as the 2-adicity of the field", async function () {
+      // 2^59 * 2^3 = 2^62 passes the parameter checks and only fails later on the number of
+      // rounds.
+      await expect(
+        verifyWith({ degreeBound: 2n ** 59n, blowupLog2: 3n }),
+      ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
+    });
+
+    it("rejects a non-canonical coset value", async function () {
+      const query = honestQuery();
+      query.folds[2].coset[0] += P;
+      await expect(verify(query, honestCommitment()))
+        .to.be.revertedWithCustomError(harness, "NonCanonicalScalar")
+        .withArgs(query.folds[2].coset[0]);
+    });
+
+    it("rejects another non-canonical coset value", async function () {
+      const query = honestQuery();
+      query.folds[0].coset[1] += P;
+      await expect(verify(query, honestCommitment()))
+        .to.be.revertedWithCustomError(harness, "NonCanonicalScalar")
+        .withArgs(query.folds[0].coset[1]);
+    });
+
+    it("rejects a missing coset value", async function () {
+      const query = honestQuery();
+      query.folds[1].coset.pop();
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
+    });
+
+    it("rejects an extra coset value", async function () {
+      const query = honestQuery();
+      query.folds[1].coset.push(42n);
+      await expect(verify(query, honestCommitment())).to.revert(ethers);
+    });
+
+    it("rejects a non-canonical coefficient of the folded polynomial", async function () {
+      const commitment = honestCommitment();
+      commitment.foldedPolynomial[0] += P;
+      await expect(verify(honestQuery(), commitment))
+        .to.be.revertedWithCustomError(harness, "NonCanonicalScalar")
+        .withArgs(commitment.foldedPolynomial[0]);
+    });
+  });
+
+  describe("rejects other tampering", function () {
+    it("rejects a tampered opened value", async function () {
+      const query = honestQuery();
+      const coset = query.folds[0].coset;
+      const offset = queriedOffset(0);
+      coset[offset] = (coset[offset] + 1n) % P;
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "LeafValueMismatch",
+      );
+    });
+
+    it("rejects a tampered partner value", async function () {
+      const query = honestQuery();
+      const coset = query.folds[0].coset;
+      const offset = queriedOffset(0) ^ 1;
+      coset[offset] = (coset[offset] + 1n) % P;
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "RootHashMismatch",
+      );
+    });
+
+    it("rejects a consistently tampered folded value", async function () {
+      // Changing a folded value breaks the consistency with the previous round.
+      const query = honestQuery();
+      const coset = query.folds[1].coset;
+      const offset = queriedOffset(1);
+      coset[offset] = (coset[offset] + 1n) % P;
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "LeafValueMismatch",
+      );
+    });
+
+    it("rejects a tampered last round", async function () {
+      const query = honestQuery();
+      const round = query.folds.length - 1;
+      const coset = query.folds[round].coset;
+      const offset = queriedOffset(round);
+      coset[offset] = (coset[offset] + 1n) % P;
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "LeafValueMismatch",
+      );
+    });
+
+    it("rejects a tampered Merkle path", async function () {
+      const query = honestQuery();
+      query.folds[1].path[1] = ethers.ZeroHash;
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "RootHashMismatch",
+      );
+    });
+
+    it("rejects a proof for a different index", async function () {
+      const query = honestQuery();
+      query.index = BigInt(QUERY_INDEX + 1);
+      await expect(verify(query, honestCommitment())).to.be.revertedWithCustomError(
+        harness,
+        "RootHashMismatch",
+      );
+    });
+
+    it("rejects the wrong degree bound", async function () {
+      await expect(
+        verify(honestQuery(), honestCommitment(), honest.values[QUERY_INDEX], {
+          ...OPTIONS,
+          degreeBound: OPTIONS.degreeBound / 2n,
+          blowupLog2: OPTIONS.blowupLog2 + 1n,
+        }),
+      ).to.be.revertedWithCustomError(harness, "WrongNumberOfFoldingRounds");
+    });
+
+    it("rejects the wrong blowup factor", async function () {
+      await expect(
+        verify(honestQuery(), honestCommitment(), honest.values[QUERY_INDEX], {
+          ...OPTIONS,
+          blowupLog2: OPTIONS.blowupLog2 + 1n,
+        }),
+      ).to.revert(ethers);
+    });
+
+    it("rejects a query from another commitment", async function () {
+      await expect(
+        verify(
+          structuredClone(foreign.queries[QUERY_INDEX]),
+          honestCommitment(),
+          foreign.values[QUERY_INDEX],
+        ),
+      ).to.be.revertedWithCustomError(harness, "RootHashMismatch");
     });
   });
 });
