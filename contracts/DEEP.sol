@@ -554,9 +554,8 @@ library DeepVerifier {
         combined = combined.add(value.mul(power));
         power = power.mul(alpha);
       }
-      bytes32 leaf = batch.baseField
-        ? Merkle.hashBaseLeaf(offset, count)
-        : Merkle.hashLeaf(offset, count);
+      bytes32 leaf =
+        batch.baseField ? Merkle.hashBaseLeaf(offset, count) : Merkle.hashLeaf(offset, count);
       Merkle.verifyPath(leaf, viewer, context.extendedDomainSizeLog2, index, batch.root);
     }
   }

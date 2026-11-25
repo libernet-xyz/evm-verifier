@@ -18,8 +18,9 @@
 //! The circuits are built like in the large blowup tests of the `merkle` module of
 //! `starkom-gadgets`, e.g. `test_full_ternary_smt_with_large_blowup`: they're blinded and have a
 //! blowup factor of 256, but they require 24 grinding bits, so there are ceil((128 - 24) / 8) = 13
-//! FRI queries. Every inner node is the `hash0` of its children with a capacity of two zero
-//! elements. All the trees hold the same five entries and the proofs look up the same key.
+//! FRI queries. Every inner node is the `hash0` of its children with the two DSTs of the chips
+//! (`DSTS`, both zero) as capacity. All the trees hold the same five entries and the proofs look up
+//! the same key.
 //!
 //! Usage:
 //!
@@ -111,25 +112,24 @@ const ENTRIES: [(u64, u64); 5] = [(12, 34), (34, 56), (56, 78), (78, 90), (90, 1
 /// The key looked up in all the trees.
 const KEY: u64 = 56;
 
+/// The DSTs of the chips, which initialize the capacity of every permutation. They're zero, which
+/// gives the same circuits as before the chips took DSTs, so the vectors generated back then are
+/// still valid.
+const DSTS: [Scalar; 2] = [Scalar::ZERO; 2];
+
 /// Hashes the children of an inner node.
 type HashChildren = fn(&[Scalar]) -> Scalar;
 
 /// Hashes the children of a node of a binary tree like the chips with Poseidon1 T4X7: `hash0` with
-/// a zero capacity.
+/// `DSTS` as capacity.
 fn hash_binary_t4x7(children: &[Scalar]) -> Scalar {
-    starkom_poseidon::hash0::<BlueSkyConfigT4X7, Scalar, 4, 2, 2>(
-        [Scalar::ZERO; 2],
-        children.iter().copied(),
-    )
+    starkom_poseidon::hash0::<BlueSkyConfigT4X7, Scalar, 4, 2, 2>(DSTS, children.iter().copied())
 }
 
 /// Hashes the children of a node of a ternary tree like the chips with Poseidon1 T5X7: `hash0`
-/// with a zero capacity.
+/// with `DSTS` as capacity.
 fn hash_ternary_t5x7(children: &[Scalar]) -> Scalar {
-    starkom_poseidon::hash0::<BlueSkyConfigT5X7, Scalar, 5, 3, 2>(
-        [Scalar::ZERO; 2],
-        children.iter().copied(),
-    )
+    starkom_poseidon::hash0::<BlueSkyConfigT5X7, Scalar, 5, 3, 2>(DSTS, children.iter().copied())
 }
 
 /// A node of a Sparse Merkle Tree.
@@ -307,25 +307,25 @@ impl Lookup {
 
 fn binary_256_t4x7() -> Lookup {
     let (value, path, root_hash) = look_up(2, 256, hash_binary_t4x7);
-    let chip = FullBinaryChip::<Scalar, BlueSkyConfigT4X7>::new(to_path(path));
+    let chip = FullBinaryChip::<Scalar, BlueSkyConfigT4X7>::new(DSTS, to_path(path));
     Lookup::new(&chip, value, root_hash)
 }
 
 fn binary_160_t4x7() -> Lookup {
     let (value, path, root_hash) = look_up(2, 160, hash_binary_t4x7);
-    let chip = BinaryChip::<Scalar, 160, BlueSkyConfigT4X7>::new(to_path(path));
+    let chip = BinaryChip::<Scalar, 160, BlueSkyConfigT4X7>::new(DSTS, to_path(path));
     Lookup::new(&chip, value, root_hash)
 }
 
 fn ternary_162_t5x7() -> Lookup {
     let (value, path, root_hash) = look_up(3, 162, hash_ternary_t5x7);
-    let chip = FullTernaryChip::<Scalar, BlueSkyConfigT5X7>::new(to_path(path));
+    let chip = FullTernaryChip::<Scalar, BlueSkyConfigT5X7>::new(DSTS, to_path(path));
     Lookup::new(&chip, value, root_hash)
 }
 
 fn ternary_102_t5x7() -> Lookup {
     let (value, path, root_hash) = look_up(3, 102, hash_ternary_t5x7);
-    let chip = TernaryChip::<Scalar, 102, BlueSkyConfigT5X7>::new(to_path(path));
+    let chip = TernaryChip::<Scalar, 102, BlueSkyConfigT5X7>::new(DSTS, to_path(path));
     Lookup::new(&chip, value, root_hash)
 }
 
