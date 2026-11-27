@@ -84,7 +84,7 @@ struct PlonkProof {
 /// @dev Verifying a proof takes two steps, with the gate constraint in between: `verify` reads the
 ///   proof, verifies the nested DEEP-FRI proof, and derives its challenges; and `checkConstraints`
 ///   performs the algebraic checks. The gate constraint depends on the gates of the circuit, so
-///   generated code evaluates it in between (see `CompressedCircuit::emit_gate_libraries` of
+///   generated code evaluates it in between (see `CompressedCircuit::make_solidity_verifier` of
 ///   `starkom-plonk`).
 ///
 ///   WARNING: `verify` alone isn't a sound PLONK verifier. In particular, the public inputs are
@@ -299,9 +299,10 @@ library PlonkVerifier {
     // Insertion sort, because circuits only have a few rotations.
     for (uint256 i = 0; i < rotations.length; i++) {
       int256 rotation = rotations[i];
-      uint256 z = rotation < 0
-        ? challenge.mul(omegaInverse.pow(uint256(-rotation)))
-        : challenge.mul(omega.pow(uint256(rotation)));
+      uint256 z =
+        rotation < 0
+          ? challenge.mul(omegaInverse.pow(uint256(-rotation)))
+          : challenge.mul(omega.pow(uint256(rotation)));
       uint256 j = i;
       while (j > 0 && zs[j - 1] > z) {
         zs[j] = zs[j - 1];
@@ -436,9 +437,13 @@ library PlonkVerifier {
     nextPower = power.mul(challenges.alpha);
   }
 
-  /// @dev Returns the helper constraint of `column`, h * (w + beta * id + gamma) * (w + beta *
-  ///   sigma + gamma) + beta * (id - sigma), which is zero iff h = 1 / (w + beta * id + gamma) - 1 /
-  ///   (w + beta * sigma + gamma). `identity` is id(xi) of the column.
+  /// @dev Returns the helper constraint of `column`:
+  ///
+  ///   h * (w + beta * id + gamma) * (w + beta * sigma + gamma) + beta * (id - sigma)
+  ///
+  ///   That is zero iff `h = 1 / (w + beta * id + gamma) - 1 / (w + beta * sigma + gamma)`.
+  ///
+  ///   `identity` is id(xi) of the column.
   function _helperConstraint(
     Evaluations memory evaluations,
     uint256 column,
