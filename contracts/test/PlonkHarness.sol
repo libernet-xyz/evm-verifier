@@ -9,8 +9,17 @@ contract PlonkHarness {
     return PlonkVerifier.PROOF_LAYOUT_IDENTIFIER;
   }
 
-  function domainSeparators() external pure returns (bytes32[2] memory) {
-    return [PlonkVerifier.TRANSCRIPT_DST, PlonkVerifier.XI_DST];
+  function domainSeparators() external pure returns (bytes32[7] memory) {
+    return
+      [
+        PlonkVerifier.TRANSCRIPT_DST,
+        PlonkVerifier.BETA_DST,
+        PlonkVerifier.GAMMA_DST,
+        PlonkVerifier.DELTA_DST,
+        PlonkVerifier.ALPHA_DST,
+        PlonkVerifier.PSI_DST,
+        PlonkVerifier.XI_DST
+      ];
   }
 
   function verify(
@@ -18,6 +27,14 @@ contract PlonkHarness {
     bytes calldata proof
   ) external view returns (PlonkProof memory) {
     return PlonkVerifier.verify(circuit, proof);
+  }
+
+  function checkConstraints(
+    PlonkCircuit calldata circuit,
+    PlonkProof calldata proof,
+    uint256 gateConstraint
+  ) external view {
+    PlonkVerifier.checkConstraints(circuit, proof, gateConstraint);
   }
 
   /// @dev Verifies like `verify` but discards the results, so that the gas cost of a call is only

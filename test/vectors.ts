@@ -150,6 +150,7 @@ export interface DeepPoint {
 export interface PlonkCircuit {
   commitment: string;
   pcsConfig: DeepOptions;
+  numRows: bigint;
   numColumns: bigint;
   numGateSelectors: bigint;
   numQuotientChunks: bigint;
@@ -173,6 +174,7 @@ export interface PlonkCase {
 interface RawCircuit {
   commitment: string;
   pcsConfig: Record<keyof DeepOptions, number>;
+  numRows: number;
   numColumns: number;
   numGateSelectors: number;
   numQuotientChunks: number;
@@ -199,6 +201,7 @@ export function loadPlonkCase(directory: URL, name: string): PlonkCase {
         maxRounds: BigInt(config.maxRounds),
         grindingBits: BigInt(config.grindingBits),
       },
+      numRows: BigInt(raw.numRows),
       numColumns: BigInt(raw.numColumns),
       numGateSelectors: BigInt(raw.numGateSelectors),
       numQuotientChunks: BigInt(raw.numQuotientChunks),

@@ -46,6 +46,7 @@ struct CircuitDescription {
     /// The Merkle root of the circuit batch, as a 0x-prefixed hex string.
     commitment: String,
     pcs_config: PcsConfig,
+    num_rows: usize,
     num_columns: usize,
     num_gate_selectors: usize,
     num_quotient_chunks: usize,
@@ -123,6 +124,7 @@ fn describe(
             max_rounds: pcs_config.max_rounds,
             grinding_bits: pcs_config.grinding_bits,
         },
+        num_rows: circuit.num_rows(),
         num_columns: circuit.num_columns(),
         num_gate_selectors,
         num_quotient_chunks,

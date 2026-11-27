@@ -8,6 +8,7 @@
     "maxRounds": 4294967295,
     "grindingBits": 24
   },
+  "numRows": 161,
   "numColumns": 93,
   "numGateSelectors": 3,
   "numQuotientChunks": 8,

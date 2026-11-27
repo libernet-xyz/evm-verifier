@@ -1,9 +1,9 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import { createHash } from "node:crypto";
-import type { PlonkHarness } from "../types/ethers-contracts/index.js";
+import { toBeHex } from "ethers";
+import type { Keccak256HashHarness, PlonkHarness } from "../types/ethers-contracts/index.js";
 import {
-  batchSizes,
   decodePlonkProof,
   encodePlonkProof,
   loadPlonkCase,
@@ -62,6 +62,11 @@ describe("PLONK verifier", function () {
     it("has the domain separators of the Rust implementation", async function () {
       expect(await harness.domainSeparators()).to.deep.equal([
         sha3("starkom/deep/transcript"),
+        sha3("starkom/plonk/challenge/beta"),
+        sha3("starkom/plonk/challenge/gamma"),
+        sha3("starkom/plonk/challenge/delta"),
+        sha3("starkom/plonk/challenge/alpha"),
+        sha3("starkom/plonk/challenge/psi"),
         sha3("starkom/plonk/challenge/xi"),
       ]);
     });
@@ -94,18 +99,6 @@ describe("PLONK verifier", function () {
       expect(result.publicInputs).to.deep.equal([3n, 35n]);
     });
 
-    it("returns the batches derived from the circuit", async function () {
-      const result = await harness.verify(blinded.circuit, blinded.scpf);
-      const roots = decode(blinded).roots;
-      const sizes = batchSizes(blinded.circuit);
-      expect(result.commitment.batches).to.deep.equal([
-        [true, sizes[0], blinded.circuit.commitment],
-        [true, sizes[1], roots[0]],
-        [false, sizes[2], roots[1]],
-        [false, sizes[3], roots[2]],
-      ]);
-    });
-
     it("returns the evaluations at every rotation", async function () {
       // The SCPF data holds the evaluations in increasing order of X-coordinate, the verifier
       // returns them in the order of the rotations, so the two are the same up to the order.
@@ -128,6 +121,96 @@ describe("PLONK verifier", function () {
         options.maxRounds,
         options.grindingBits,
       ]);
+    });
+  });
+
+  // The challenges follow transcript hashes of the first batches of the commitment (see
+  // `Commitment::transcript_hash` of `starkom-pcs`), whose roots are the commitment of the circuit
+  // and the roots of the proof.
+  describe("derives the challenges like the Rust implementation", function () {
+    let hashHarness: Keccak256HashHarness;
+
+    before(async function () {
+      hashHarness = await ethers.deployContract("Keccak256HashHarness");
+    });
+
+    /** Returns the transcript hash of the first `numBatches` batches of the unblinded proof. */
+    function transcriptHash(numBatches: number): Promise<string> {
+      const roots = [unblinded.circuit.commitment, ...decode(unblinded).roots];
+      return hashHarness.hashTranscript(sha3("starkom/deep/transcript"), [
+        toBeHex(numBatches, 32),
+        ...roots.slice(0, numBatches),
+      ]);
+    }
+
+    it("derives beta, gamma, and delta from the circuit and witness batches", async function () {
+      const transcript = [await transcriptHash(2)];
+      const { challenges } = await harness.verify(unblinded.circuit, unblinded.scpf);
+      expect(challenges.beta).to.equal(
+        await hashHarness.challenge(sha3("starkom/plonk/challenge/beta"), transcript),
+      );
+      expect(challenges.gamma).to.equal(
+        await hashHarness.challenge(sha3("starkom/plonk/challenge/gamma"), transcript),
+      );
+      expect(challenges.delta).to.equal(
+        await hashHarness.challenge(sha3("starkom/plonk/challenge/delta"), transcript),
+      );
+    });
+
+    it("derives alpha from the first three batches", async function () {
+      const transcript = [await transcriptHash(3)];
+      const { challenges } = await harness.verify(unblinded.circuit, unblinded.scpf);
+      expect(challenges.alpha).to.equal(
+        await hashHarness.challenge(sha3("starkom/plonk/challenge/alpha"), transcript),
+      );
+    });
+
+    // Like `public_cell_challenge`: the transcript hash, the number of public cells, and every cell
+    // (`encode_cell`, i.e. `row << 128 | column`) followed by its value.
+    it("derives psi from the first three batches and the public cells", async function () {
+      const [first, second] = unblinded.circuit.publicCells;
+      const transcript = [
+        await transcriptHash(3),
+        toBeHex(2, 32),
+        toBeHex((first.row << 128n) | first.column, 32),
+        toBeHex(3, 32),
+        toBeHex((second.row << 128n) | second.column, 32),
+        toBeHex(35, 32),
+      ];
+      const { challenges } = await harness.verify(unblinded.circuit, unblinded.scpf);
+      expect(challenges.psi).to.equal(
+        await hashHarness.challenge(sha3("starkom/plonk/challenge/psi"), transcript),
+      );
+    });
+
+    it("derives xi from all the batches", async function () {
+      const transcript = [await transcriptHash(4)];
+      const { challenges } = await harness.verify(unblinded.circuit, unblinded.scpf);
+      expect(challenges.xi).to.equal(
+        await hashHarness.challenge(sha3("starkom/plonk/challenge/xi"), transcript),
+      );
+    });
+  });
+
+  // The algebraic checks need the gate constraint, which only generated code computes, so their
+  // positive cases are tested with full verifiers.
+  describe("checks the constraints", function () {
+    it("rejects a circuit without the rotation 0", async function () {
+      // A copy of the result, which is read-only.
+      const proof = (await harness.verify(unblinded.circuit, unblinded.scpf)).toArray(true);
+      const circuit = { ...unblinded.circuit, rotations: [1n, 2n] };
+      await expect(harness.checkConstraints(circuit, proof, 0n))
+        .to.be.revertedWithCustomError(harness, "MissingRotation")
+        .withArgs(0n);
+    });
+
+    it("rejects a circuit without the rotation 1", async function () {
+      // A copy of the result, which is read-only.
+      const proof = (await harness.verify(unblinded.circuit, unblinded.scpf)).toArray(true);
+      const circuit = { ...unblinded.circuit, rotations: [-1n, 0n] };
+      await expect(harness.checkConstraints(circuit, proof, 0n))
+        .to.be.revertedWithCustomError(harness, "MissingRotation")
+        .withArgs(1n);
     });
   });
 

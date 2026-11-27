@@ -13,5 +13,6 @@ starkom-ff = "5.0.2"
 # TODO: switch to the published crate once `starkom-gadgets` 4 is released.
 starkom-gadgets = { path = "../../../gadgets" }
 starkom-pcs = "12.0.0"
-starkom-plonk = "12.0.0"
+# The local `plonk` repo, like `starkom-gadgets` uses.
+starkom-plonk = { path = "../../../plonk" }
 starkom-poseidon = { version = "5.1.4", features = ["bluesky"] }
