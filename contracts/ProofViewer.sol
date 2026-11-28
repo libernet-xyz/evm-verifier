@@ -143,17 +143,6 @@ library ProofViewerMethods {
     self.cursor = cursor;
   }
 
-  /// @notice Reads the next inline word of the stream.
-  function popInlineWord(ProofViewer memory self) internal pure returns (uint256 word) {
-    uint256 cursor = self.cursor;
-    assembly {
-      word := calldataload(cursor)
-    }
-    unchecked {
-      self.cursor = cursor + 32;
-    }
-  }
-
   /// @notice Reads the next pool reference of the stream and returns the referenced pool word.
   function popPoolWord(ProofViewer memory self) internal pure returns (bytes32) {
     return _poolWord(self, popVarint(self));

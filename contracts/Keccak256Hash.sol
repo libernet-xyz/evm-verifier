@@ -10,13 +10,6 @@ library Keccak256Hash {
   /// @dev 2^256 mod P, used to reduce a 512-bit hash to a field element.
   uint256 constant RANGE_MOD_P = 0x00000000000000000000000000000003f318441ac2c955707ffffffffffffffe;
 
-  /// @notice Hashes the provided field elements.
-  /// @dev Each element is encoded as 32 big-endian bytes. This is a raw hash: no DST or element
-  ///   count is prepended. Matches `Hasher::hash`.
-  function hash(uint256[] memory inputs) internal pure returns (bytes32) {
-    return keccak256(abi.encodePacked(inputs));
-  }
-
   /// @notice Hashes a binary Merkle tree node. Matches `MerkleHasher::hash_binary`.
   function hashBinary(bytes32 left, bytes32 right) internal pure returns (bytes32 result) {
     assembly ("memory-safe") {

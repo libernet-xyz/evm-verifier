@@ -125,14 +125,18 @@ export function loadFriCases(): FriCase[] {
   }));
 }
 
-/** The DEEP-FRI parameters (see `DeepOptions` in `DEEP.sol`). */
+/** The DEEP-FRI parameters other than the FRI settings (see `DeepOptions` in `DEEP.sol`). */
 export interface DeepOptions {
   degreeBound: bigint;
   securityBits: bigint;
   blowupLog2: bigint;
+  grindingBits: bigint;
+}
+
+/** All the parameters of a DEEP-FRI proof: the DEEP ones and the FRI settings. */
+export interface ProofOptions extends DeepOptions {
   foldRate: bigint;
   maxRounds: bigint;
-  grindingBits: bigint;
 }
 
 /** A batched DEEP-FRI commitment (see `DeepCommitment` in `DEEP.sol`). */
@@ -197,8 +201,6 @@ export function loadPlonkCase(directory: URL, name: string): PlonkCase {
         degreeBound: BigInt(config.degreeBound),
         securityBits: BigInt(config.securityBits),
         blowupLog2: BigInt(config.blowupLog2),
-        foldRate: BigInt(config.foldRate),
-        maxRounds: BigInt(config.maxRounds),
         grindingBits: BigInt(config.grindingBits),
       },
       numRows: BigInt(raw.numRows),
@@ -357,7 +359,7 @@ export interface PlonkProofData {
   publicInputs: bigint[];
   /** The roots of the witness, permutation argument, and quotient batches. */
   roots: string[];
-  options: DeepOptions;
+  options: ProofOptions;
   nonce: bigint;
   /** The evaluations of all the committed polynomials at every point, in increasing order of X. */
   evaluations: bigint[][];

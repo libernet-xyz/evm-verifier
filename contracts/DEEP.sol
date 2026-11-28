@@ -7,7 +7,8 @@ import "./Keccak256Hash.sol";
 import "./Merkle.sol";
 import "./ProofViewer.sol";
 
-/// @notice The parameters of the DEEP-FRI protocol.
+/// @notice The parameters of the DEEP-FRI protocol other than the FRI settings (see `FriOptions`),
+///   which every proof chooses for itself: those that a verifier expects, or those of a proof.
 struct DeepOptions {
   /// @dev The proven degree bound, a power of 2.
   uint256 degreeBound;
@@ -16,10 +17,6 @@ struct DeepOptions {
   uint256 securityBits;
   /// @dev The base-2 logarithm of the blowup factor, greater than 0.
   uint256 blowupLog2;
-  /// @dev The number of FRI folds per round, greater than 0.
-  uint256 foldRate;
-  /// @dev The maximum number of FRI folding rounds, at most `DeepVerifier.MAX_FRI_ROUNDS`.
-  uint256 maxRounds;
   /// @dev The number of grinding bits, at most 256 (the number of bits of the proof-of-work hash).
   uint256 grindingBits;
 }
@@ -62,6 +59,10 @@ struct DeepPoint {
 library DeepVerifier {
   using BlueSky for uint256;
   using ProofViewerMethods for ProofViewer;
+
+  /// @dev Reverted when a value of the proof is not a canonical field element, i.e. not less than
+  ///   the modulus.
+  error NonCanonicalScalar(uint256 value);
 
   /// @dev Reverted when the commitment has no polynomial batches.
   error NoBatches();
@@ -161,8 +162,7 @@ library DeepVerifier {
   ///   expects `expected`.
   /// @dev Matches `starkom_pcs::Options::satisfies`: the degree bound, the security level, and the
   ///   blowup factor must be equal to the expected ones, and the number of grinding bits must be
-  ///   greater than or equal to the expected one. The FRI parameters, i.e. the fold rate and the
-  ///   maximum number of rounds, can be anything.
+  ///   greater than or equal to the expected one. The FRI settings of the proof can be anything.
   function satisfies(
     DeepOptions memory options,
     DeepOptions memory expected
@@ -174,9 +174,11 @@ library DeepVerifier {
       options.grindingBits >= expected.grindingBits;
   }
 
-  /// @notice Encodes the transcript of the DEEP layer.
+  /// @notice Encodes the transcript of the DEEP layer. `options` and `friOptions` are the
+  ///   parameters of the proof, which share the degree bound and the blowup factor.
   function deepTranscript(
     DeepOptions memory options,
+    FriOptions memory friOptions,
     DeepCommitment memory commitment,
     uint256 numPolys,
     DeepPoint[] memory points
@@ -191,8 +193,8 @@ library DeepVerifier {
     transcript[position++] = bytes32(options.degreeBound);
     transcript[position++] = bytes32(options.securityBits);
     transcript[position++] = bytes32(options.blowupLog2);
-    transcript[position++] = bytes32(options.foldRate);
-    transcript[position++] = bytes32(options.maxRounds);
+    transcript[position++] = bytes32(friOptions.foldRate);
+    transcript[position++] = bytes32(friOptions.maxRounds);
     transcript[position++] = bytes32(options.grindingBits);
     transcript[position++] = bytes32(batches.length);
     for (uint256 b = 0; b < batches.length; b++) {
@@ -214,6 +216,7 @@ library DeepVerifier {
   ///   transcript is hashed only once.
   function deepTranscriptHash(
     DeepOptions memory options,
+    FriOptions memory friOptions,
     DeepCommitment memory commitment,
     uint256 numPolys,
     DeepPoint[] memory points
@@ -221,7 +224,7 @@ library DeepVerifier {
     return
       Keccak256Hash.hashTranscript(
         DEEP_TRANSCRIPT_DST,
-        deepTranscript(options, commitment, numPolys, points)
+        deepTranscript(options, friOptions, commitment, numPolys, points)
       );
   }
 
@@ -306,7 +309,7 @@ library DeepVerifier {
   /// @param commitment The commitment, whose shape the caller checks.
   /// @param zs The X-coordinates of the opened points, sorted by strictly increasing value (the
   ///   order of the `BTreeMap` of the Rust implementation).
-  /// @return options The parameters of the proof.
+  /// @return options The parameters of the proof, other than its FRI settings.
   /// @return points The opened points with the evaluations of the committed polynomials.
   function verify(
     ProofViewer memory viewer,
@@ -314,24 +317,24 @@ library DeepVerifier {
     DeepCommitment memory commitment,
     uint256[] memory zs
   ) internal view returns (DeepOptions memory options, DeepPoint[] memory points) {
-    options = _readOptions(viewer);
     Context memory context;
-    context.extendedDomainSizeLog2 = _validateOptions(options);
+    (options, context.friOptions) = _readOptions(viewer);
+    context.extendedDomainSizeLog2 = _validateOptions(options, context.friOptions);
     if (!satisfies(options, expected)) {
       revert OptionsMismatch();
     }
     uint64 nonce = uint64(viewer.popVarint());
     uint256 numPolys = _validateBatches(commitment);
     points = _readPoints(viewer, zs, numPolys, context.extendedDomainSizeLog2);
-    context.friOptions = FriOptions({
-      degreeBound: options.degreeBound,
-      blowupLog2: options.blowupLog2,
-      foldRate: options.foldRate,
-      maxRounds: options.maxRounds
-    });
     context.friCommitment = _readFriCommitment(viewer, context.friOptions);
 
-    bytes32 transcriptHash = deepTranscriptHash(options, commitment, numPolys, points);
+    bytes32 transcriptHash = deepTranscriptHash(
+      options,
+      context.friOptions,
+      commitment,
+      numPolys,
+      points
+    );
     bytes32 pow = proofOfWork(querySeed(transcriptHash, context.friCommitment), nonce);
     if (!checkProofOfWork(pow, options.grindingBits)) {
       revert InsufficientProofOfWork();
@@ -355,42 +358,34 @@ library DeepVerifier {
     }
   }
 
-  /// @dev Reads the parameters of the proof.
+  /// @dev Reads the parameters of the proof: the DEEP ones and the FRI ones, which share the degree
+  ///   bound and the blowup factor.
   function _readOptions(
     ProofViewer memory viewer
-  ) private pure returns (DeepOptions memory options) {
+  ) private pure returns (DeepOptions memory options, FriOptions memory friOptions) {
     options.degreeBound = viewer.popVarint();
     options.securityBits = viewer.popVarint();
     options.blowupLog2 = viewer.popVarint();
-    options.foldRate = viewer.popVarint();
-    options.maxRounds = viewer.popVarint();
+    friOptions.degreeBound = options.degreeBound;
+    friOptions.blowupLog2 = options.blowupLog2;
+    friOptions.foldRate = viewer.popVarint();
+    friOptions.maxRounds = viewer.popVarint();
     options.grindingBits = viewer.popVarint();
   }
 
-  /// @dev Validates the DEEP protocol parameters and returns the base-2 logarithm of the size of
-  ///   the extended evaluation domain.
-  function _validateOptions(DeepOptions memory options) private pure returns (uint256) {
-    uint256 degreeBound = options.degreeBound;
-    if (degreeBound == 0 || degreeBound & (degreeBound - 1) != 0) {
-      revert FriVerifier.InvalidDegreeBound(degreeBound);
-    }
-    if (options.blowupLog2 == 0) {
-      revert FriVerifier.InvalidBlowupFactor();
-    }
-    if (options.foldRate == 0) {
-      revert FriVerifier.InvalidFoldRate();
-    }
-    uint256 degreeBoundLog2 = _log2(degreeBound);
-    if (degreeBoundLog2 > BlueSky.S || options.blowupLog2 > BlueSky.S - degreeBoundLog2) {
-      revert FriVerifier.DomainTooLarge(degreeBoundLog2, options.blowupLog2);
-    }
-    if (options.maxRounds > MAX_FRI_ROUNDS) {
-      revert InvalidMaxRounds(options.maxRounds);
+  /// @dev Validates the DEEP protocol parameters, whose FRI part is `friOptions`, and returns the
+  ///   base-2 logarithm of the size of the extended evaluation domain.
+  function _validateOptions(
+    DeepOptions memory options,
+    FriOptions memory friOptions
+  ) private pure returns (uint256 extendedDomainSizeLog2) {
+    extendedDomainSizeLog2 = FriVerifier.validateOptions(friOptions);
+    if (friOptions.maxRounds > MAX_FRI_ROUNDS) {
+      revert InvalidMaxRounds(friOptions.maxRounds);
     }
     if (options.grindingBits > PROOF_OF_WORK_BITS) {
       revert InvalidGrindingBits(options.grindingBits);
     }
-    return degreeBoundLog2 + options.blowupLog2;
   }
 
   /// @dev Performs the checks of `Commitment::from_proto` and returns the total number of
@@ -446,7 +441,8 @@ library DeepVerifier {
   }
 
   /// @dev Reads the FRI commitment, whose number of roots is determined by the parameters, and
-  ///   validates it with `FriVerifier.validateCommitment`.
+  ///   validates it with `FriVerifier.validateCommitment`. The parameters must have been validated
+  ///   with `_validateOptions`.
   function _readFriCommitment(
     ProofViewer memory viewer,
     FriOptions memory friOptions
@@ -576,15 +572,7 @@ library DeepVerifier {
   /// @dev Reverts if `value` is not a canonical field element.
   function _checkCanonical(uint256 value) private pure {
     if (value >= BlueSky.P) {
-      revert Merkle.NonCanonicalScalar(value);
-    }
-  }
-
-  /// @dev Returns log2(n) for a power of 2 n.
-  function _log2(uint256 n) private pure returns (uint256 result) {
-    while (n > 1) {
-      n >>= 1;
-      result++;
+      revert NonCanonicalScalar(value);
     }
   }
 }

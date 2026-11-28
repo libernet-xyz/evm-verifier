@@ -222,11 +222,6 @@ describe("ProofViewer", function () {
   });
 
   describe("inline words", function () {
-    it("reads a word after a varint", async function () {
-      const stream = ethers.concat(["0x05", ethers.toBeHex(42n, 32)]);
-      expect(await harness.popVarintAndInlineWord(dataWithPool(stream))).to.deep.equal([5n, 42n]);
-    });
-
     it("reads words into an array", async function () {
       const stream = ethers.concat([ethers.toBeHex(12n, 32), ethers.toBeHex(34n, 32)]);
       expect(await harness.popWords(dataWithPool(stream), 2)).to.deep.equal([[12n, 34n], 128n]);
@@ -254,9 +249,8 @@ describe("ProofViewer", function () {
     });
 
     it("rejects a truncated word", async function () {
-      const stream = ethers.concat(["0x05", ethers.toBeHex(42n, 31)]);
       await expect(
-        harness.popVarintAndInlineWord(dataWithPool(stream)),
+        harness.popWords(dataWithPool(ethers.toBeHex(42n, 31)), 1),
       ).to.be.revertedWithCustomError(harness, "TruncatedProof");
     });
 

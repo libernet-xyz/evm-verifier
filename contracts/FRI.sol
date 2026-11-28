@@ -42,6 +42,10 @@ library FriVerifier {
   using BlueSky for uint256;
   using ProofViewerMethods for ProofViewer;
 
+  /// @dev Reverted when a value of the proof is not a canonical field element, i.e. not less than
+  ///   the modulus.
+  error NonCanonicalScalar(uint256 value);
+
   /// @dev Reverted when the degree bound is not a power of 2.
   error InvalidDegreeBound(uint256 degreeBound);
 
@@ -116,12 +120,9 @@ library FriVerifier {
     }
   }
 
-  /// @notice Checks the FRI parameters and a commitment, reverting if they're invalid, and returns
-  ///   the number of folding rounds.
-  function validateCommitment(
-    FriOptions memory options,
-    FriCommitment memory commitment
-  ) internal pure returns (uint256 rounds) {
+  /// @notice Checks the FRI parameters, reverting if they're invalid, and returns the base-2
+  ///   logarithm of the size of the extended domain.
+  function validateOptions(FriOptions memory options) internal pure returns (uint256) {
     uint256 degreeBound = options.degreeBound;
     if (degreeBound == 0 || degreeBound & (degreeBound - 1) != 0) {
       revert InvalidDegreeBound(degreeBound);
@@ -136,12 +137,20 @@ library FriVerifier {
     if (degreeBoundLog2 > BlueSky.S || options.blowupLog2 > BlueSky.S - degreeBoundLog2) {
       revert DomainTooLarge(degreeBoundLog2, options.blowupLog2);
     }
+    return degreeBoundLog2 + options.blowupLog2;
+  }
 
-    rounds = numRounds(degreeBound, options.foldRate, options.maxRounds);
+  /// @notice Checks a commitment, reverting if it's invalid, and returns the number of folding
+  ///   rounds. The parameters must have been validated with `validateOptions`.
+  function validateCommitment(
+    FriOptions memory options,
+    FriCommitment memory commitment
+  ) internal pure returns (uint256 rounds) {
+    rounds = numRounds(options.degreeBound, options.foldRate, options.maxRounds);
     if (commitment.roots.length != rounds) {
       revert WrongNumberOfFoldingRounds();
     }
-    uint256 maximum = degreeBound >> (rounds * options.foldRate);
+    uint256 maximum = options.degreeBound >> (rounds * options.foldRate);
     uint256[] memory coefficients = commitment.foldedPolynomial;
     if (coefficients.length > maximum) {
       revert InvalidFoldedPolynomialSize(coefficients.length, maximum);
@@ -153,7 +162,7 @@ library FriVerifier {
 
   /// @notice Verifies a FRI query against a commitment, reverting if it's invalid.
   /// @dev Performs the checks of both `Query::from_proto` and `Query::verify`. The parameters and
-  ///   the commitment must have been validated with `validateCommitment`.
+  ///   the commitment must have been validated with `validateOptions` and `validateCommitment`.
   ///
   ///   The query is made up of several Merkle paths, one for every round. The paths are read from
   ///   `viewer`.
@@ -237,7 +246,7 @@ library FriVerifier {
   /// @dev Reverts if `value` is not a canonical field element.
   function _checkCanonical(uint256 value) private pure {
     if (value >= BlueSky.P) {
-      revert Merkle.NonCanonicalScalar(value);
+      revert NonCanonicalScalar(value);
     }
   }
 

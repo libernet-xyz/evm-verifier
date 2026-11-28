@@ -37,16 +37,6 @@ contract ProofViewerHarness {
     left = viewer.end - viewer.cursor;
   }
 
-  /// @dev Reads a varint and an inline word from the stream, then closes the data.
-  function popVarintAndInlineWord(
-    bytes calldata data
-  ) external pure returns (uint256 varint, uint256 word) {
-    ProofViewer memory viewer = ProofViewerMethods.open(data, TEST_LAYOUT_IDENTIFIER);
-    varint = viewer.popVarint();
-    word = viewer.popInlineWord();
-    viewer.close();
-  }
-
   /// @dev Reads `count` pool words referred to by the stream, then closes the data.
   function popPoolWords(
     bytes calldata data,

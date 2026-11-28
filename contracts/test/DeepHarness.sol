@@ -38,27 +38,30 @@ contract DeepHarness {
 
   function deepTranscript(
     DeepOptions calldata options,
+    FriOptions calldata friOptions,
     DeepCommitment calldata commitment,
     uint256 numPolys,
     DeepPoint[] calldata points
   ) external pure returns (bytes32[] memory) {
-    return DeepVerifier.deepTranscript(options, commitment, numPolys, points);
+    return DeepVerifier.deepTranscript(options, friOptions, commitment, numPolys, points);
   }
 
   function deepChallenges(
     DeepOptions calldata options,
+    FriOptions calldata friOptions,
     DeepCommitment calldata commitment,
     uint256 numPolys,
     DeepPoint[] calldata points
   ) external pure returns (uint256 alpha, uint256 beta) {
     return
       DeepVerifier.deepChallenges(
-        DeepVerifier.deepTranscriptHash(options, commitment, numPolys, points)
+        DeepVerifier.deepTranscriptHash(options, friOptions, commitment, numPolys, points)
       );
   }
 
   function querySeed(
     DeepOptions calldata options,
+    FriOptions calldata friOptions,
     DeepCommitment calldata commitment,
     uint256 numPolys,
     DeepPoint[] calldata points,
@@ -66,7 +69,7 @@ contract DeepHarness {
   ) external pure returns (bytes32) {
     return
       DeepVerifier.querySeed(
-        DeepVerifier.deepTranscriptHash(options, commitment, numPolys, points),
+        DeepVerifier.deepTranscriptHash(options, friOptions, commitment, numPolys, points),
         friCommitment
       );
   }

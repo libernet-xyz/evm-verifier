@@ -12,9 +12,6 @@ import "./ProofViewer.sol";
 library Merkle {
   using ProofViewerMethods for ProofViewer;
 
-  /// @dev Reverted when a leaf value is not a canonical field element.
-  error NonCanonicalScalar(uint256 value);
-
   /// @dev Reverted when the leaf index does not fit in the height of the Merkle path.
   error InvalidIndex();
 
@@ -60,23 +57,6 @@ library Merkle {
   ///   `BaseLeafHasher::hash`.
   function hashBaseLeaf(uint256 offset, uint256 count) internal pure returns (bytes32) {
     return _hashLeaf(BASE_LEAF_DST, offset, count);
-  }
-
-  /// @notice Verifies the Merkle proof of a leaf of a tree of polynomials over the extension field,
-  ///   reverting if it's invalid.
-  /// @dev Matches `Proof::verify`. The leaf values are the `count` words at calldata offset
-  ///   `offset`, and the `height` sibling hashes of the Merkle path are read from `viewer`.
-  /// @param index The leaf index, which determines the left/right position at each level.
-  /// @param rootHash The expected Merkle root.
-  function verify(
-    uint256 offset,
-    uint256 count,
-    ProofViewer memory viewer,
-    uint256 height,
-    uint256 index,
-    bytes32 rootHash
-  ) internal pure {
-    verifyPath(hashLeaf(offset, count), viewer, height, index, rootHash);
   }
 
   /// @notice Recomputes a Merkle root from a leaf and its Merkle path, and checks it against

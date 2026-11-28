@@ -1,7 +1,13 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import type { DeepHarness } from "../types/ethers-contracts/index.js";
-import type { DeepCommitment, DeepOptions, DeepPoint, FriCommitment } from "./vectors.js";
+import type {
+  DeepCommitment,
+  DeepOptions,
+  DeepPoint,
+  FriCommitment,
+  FriOptions,
+} from "./vectors.js";
 
 const { ethers } = await network.create();
 
@@ -15,9 +21,13 @@ const options: DeepOptions = {
   degreeBound: 4n,
   securityBits: 128n,
   blowupLog2: 4n,
+  grindingBits: 0n,
+};
+const friOptions: FriOptions = {
+  degreeBound: 4n,
+  blowupLog2: 4n,
   foldRate: 1n,
   maxRounds: 2n ** 32n - 1n,
-  grindingBits: 0n,
 };
 const commitment: DeepCommitment = {
   batches: [
@@ -109,30 +119,19 @@ describe("DEEP verifier", function () {
     }
   });
 
-  // Same cases as the `starkom_pcs::deep::tests::test_*_options_*satisfy` tests.
+  // The cases of the `starkom_pcs::deep::tests::test_*_options_*satisfy` tests that don't change
+  // the FRI settings, which `DeepOptions` doesn't have.
   describe("satisfies", function () {
     const expected: DeepOptions = {
       degreeBound: 4096n,
       securityBits: 128n,
       blowupLog2: 6n,
-      foldRate: 3n,
-      maxRounds: 2n,
       grindingBits: 20n,
     };
     const accepted: [string, Partial<DeepOptions>][] = [
       ["equal options", {}],
       ["more grinding bits", { grindingBits: 21n }],
       ["full grinding", { grindingBits: 256n }],
-      ["a lower fold rate", { foldRate: 1n }],
-      ["a higher fold rate", { foldRate: 4n }],
-      ["no rounds", { maxRounds: 0n }],
-      ["more rounds", { maxRounds: 3n }],
-      ["unlimited rounds", { maxRounds: 2n ** 32n - 1n }],
-      ["another fold rate and number of rounds", { foldRate: 2n, maxRounds: 6n }],
-      [
-        "another fold rate and number of rounds with more grinding bits",
-        { foldRate: 2n, maxRounds: 6n, grindingBits: 21n },
-      ],
     ];
     for (const [name, changes] of accepted) {
       it(`accepts ${name}`, async function () {
@@ -153,7 +152,6 @@ describe("DEEP verifier", function () {
       ["a smaller blowup factor", { blowupLog2: 5n }],
       ["a larger blowup factor", { blowupLog2: 7n }],
       ["a larger degree bound with more grinding bits", { degreeBound: 8192n, grindingBits: 21n }],
-      ["a larger blowup factor with another fold rate", { blowupLog2: 7n, foldRate: 1n }],
     ];
     for (const [name, changes] of rejected) {
       it(`rejects ${name}`, async function () {
@@ -165,35 +163,50 @@ describe("DEEP verifier", function () {
   // Mirrors `starkom_pcs::deep::tests::test_deep_transcript_hash_binds_options`, checking that the
   // parameters reach both the DEEP challenges and the query seed through the transcript hash.
   describe("transcript", function () {
-    const others: [string, Partial<DeepOptions>][] = [
-      ["degree bound", { degreeBound: 8n }],
-      ["security level", { securityBits: 129n }],
-      ["blowup factor", { blowupLog2: 3n }],
-      ["fold rate", { foldRate: 2n }],
-      ["maximum number of rounds", { maxRounds: 1n }],
-      ["number of grinding bits", { grindingBits: 8n }],
+    // The changes of the DEEP parameters and of the FRI settings, which share the degree bound and
+    // the blowup factor.
+    const others: [string, Partial<DeepOptions>, Partial<FriOptions>][] = [
+      ["degree bound", { degreeBound: 8n }, { degreeBound: 8n }],
+      ["security level", { securityBits: 129n }, {}],
+      ["blowup factor", { blowupLog2: 3n }, { blowupLog2: 3n }],
+      ["fold rate", {}, { foldRate: 2n }],
+      ["maximum number of rounds", {}, { maxRounds: 1n }],
+      ["number of grinding bits", { grindingBits: 8n }, {}],
     ];
 
     it("starts with the parameters", async function () {
-      const transcript = await harness.deepTranscript(options, commitment, numPolys, points);
+      const transcript = await harness.deepTranscript(
+        options,
+        friOptions,
+        commitment,
+        numPolys,
+        points,
+      );
       expect(transcript.slice(0, 7)).to.deep.equal(
         [
           options.degreeBound,
           options.securityBits,
           options.blowupLog2,
-          options.foldRate,
-          options.maxRounds,
+          friOptions.foldRate,
+          friOptions.maxRounds,
           options.grindingBits,
           BigInt(commitment.batches.length),
         ].map((value) => ethers.toBeHex(value, 32)),
       );
     });
 
-    for (const [name, changes] of others) {
+    for (const [name, changes, friChanges] of others) {
       it(`binds the ${name} into the DEEP challenges`, async function () {
-        const [alpha, beta] = await harness.deepChallenges(options, commitment, numPolys, points);
+        const [alpha, beta] = await harness.deepChallenges(
+          options,
+          friOptions,
+          commitment,
+          numPolys,
+          points,
+        );
         const [otherAlpha, otherBeta] = await harness.deepChallenges(
           { ...options, ...changes },
+          { ...friOptions, ...friChanges },
           commitment,
           numPolys,
           points,
@@ -203,9 +216,17 @@ describe("DEEP verifier", function () {
       });
 
       it(`binds the ${name} into the query seed`, async function () {
-        const seed = await harness.querySeed(options, commitment, numPolys, points, friCommitment);
+        const seed = await harness.querySeed(
+          options,
+          friOptions,
+          commitment,
+          numPolys,
+          points,
+          friCommitment,
+        );
         const otherSeed = await harness.querySeed(
           { ...options, ...changes },
+          { ...friOptions, ...friChanges },
           commitment,
           numPolys,
           points,

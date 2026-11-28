@@ -21,8 +21,8 @@ struct PlonkCircuit {
   /// @dev The Merkle root of the circuit batch.
   bytes32 commitment;
   /// @dev The settings of the PCS fixed by the circuit: the degree bound, the security level, the
-  ///   blowup factor, and the minimum number of grinding bits. The FRI settings are ignored,
-  ///   because every proof chooses its own.
+  ///   blowup factor, and the minimum number of grinding bits. Every proof chooses its own FRI
+  ///   settings.
   DeepOptions pcsConfig;
   /// @dev The number of rows of the circuit area, without the blinding rows and the padding.
   uint256 numRows;
@@ -67,7 +67,8 @@ struct PlonkChallenges {
 struct PlonkProof {
   /// @dev The values of the public cells, in the order of `PlonkCircuit.publicCells`.
   uint256[] publicInputs;
-  /// @dev The parameters of the DEEP-FRI proof, chosen by the prover.
+  /// @dev The parameters of the DEEP-FRI proof other than its FRI settings: those of the circuit,
+  ///   except that the number of grinding bits can be larger.
   DeepOptions options;
   /// @dev The full set of Fiat-Shamir challenges used at the PLONK layer.
   PlonkChallenges challenges;
@@ -92,6 +93,10 @@ struct PlonkProof {
 library PlonkVerifier {
   using BlueSky for uint256;
   using ProofViewerMethods for ProofViewer;
+
+  /// @dev Reverted when a public input of a proof is not a canonical field element, i.e. not less
+  ///   than the modulus.
+  error NonCanonicalScalar(uint256 value);
 
   /// @dev Reverted when the evaluations of a proof don't satisfy the constraints of the circuit,
   ///   e.g. because its public inputs aren't the ones it was generated with.
@@ -164,7 +169,7 @@ library PlonkVerifier {
     result.publicInputs = viewer.popWords(circuit.publicCells.length);
     for (uint256 i = 0; i < result.publicInputs.length; i++) {
       if (result.publicInputs[i] >= BlueSky.P) {
-        revert Merkle.NonCanonicalScalar(result.publicInputs[i]);
+        revert NonCanonicalScalar(result.publicInputs[i]);
       }
     }
     DeepCommitment memory commitment = _readCommitment(viewer, circuit);

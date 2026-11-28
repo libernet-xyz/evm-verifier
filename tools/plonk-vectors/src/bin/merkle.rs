@@ -28,13 +28,17 @@
 //!   benchmark, named after it (see `plonk_vectors::write_case`), proven with its FRI settings;
 //! - `cargo run --release --bin merkle -- sweep <benchmark> <directory>` writes one test case for
 //!   every useful combination of fold rate and number of rounds of a benchmark, to compare them
-//!   with `scripts/tune-merkle-fri.ts`.
+//!   with `scripts/tune-merkle-fri.ts`;
+//! - `cargo run --release --bin merkle -- verifiers ../../test/vectors/merkle
+//!   ../../contracts/test/generated` replaces the contents of the last directory with the Solidity
+//!   verifier of every benchmark (see `plonk_vectors::write_verifier`), which verifies the proof of
+//!   its test case. It proves nothing.
 //!
 //! The circuits are blinded with random values, so every run generates different proofs.
 
-use plonk_vectors::{write_case, write_circuit, write_proof, Hash};
+use plonk_vectors::{Hash, write_case, write_circuit, write_proof, write_verifier};
 use primitive_types::U256;
-use starkom_bluesky::{from_const, Scalar};
+use starkom_bluesky::{Scalar, from_const};
 use starkom_ff::Field;
 use starkom_gadgets::merkle::{BinaryChip, FullBinaryChip, FullTernaryChip, TernaryChip};
 use starkom_plonk::{
@@ -42,12 +46,14 @@ use starkom_plonk::{
     ProofOptions, Witness, WitnessView,
 };
 use starkom_poseidon::{BlueSkyConfigT4X7, BlueSkyConfigT5X7};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 /// A Merkle lookup benchmark.
 struct Benchmark {
     name: &'static str,
+    /// The prefix of the names of the libraries of its Solidity verifier.
+    verifier_name: &'static str,
     /// The number of FRI folds per round of the proof.
     fold_rate: usize,
     /// The maximum number of FRI rounds of the proof, 0 to send the whole DEEP quotient in the
@@ -79,24 +85,28 @@ struct Benchmark {
 const BENCHMARKS: [Benchmark; 4] = [
     Benchmark {
         name: "binary-256-t4x7",
+        verifier_name: "Binary256T4X7",
         fold_rate: 3,
         max_rounds: 1,
         make_lookup: binary_256_t4x7,
     },
     Benchmark {
         name: "binary-160-t4x7",
+        verifier_name: "Binary160T4X7",
         fold_rate: 1,
         max_rounds: 0,
         make_lookup: binary_160_t4x7,
     },
     Benchmark {
         name: "ternary-162-t5x7",
+        verifier_name: "Ternary162T5X7",
         fold_rate: 1,
         max_rounds: 0,
         make_lookup: ternary_162_t5x7,
     },
     Benchmark {
         name: "ternary-102-t5x7",
+        verifier_name: "Ternary102T5X7",
         fold_rate: 1,
         max_rounds: 0,
         make_lookup: ternary_102_t5x7,
@@ -375,6 +385,24 @@ fn main() {
                 write_proof(&directory, &name, &proof);
             }
         }
+        [command, vectors_directory, directory] if command == "verifiers" => {
+            let directory = PathBuf::from(directory);
+            if directory.exists() {
+                std::fs::remove_dir_all(&directory).unwrap();
+            }
+            std::fs::create_dir_all(&directory).unwrap();
+            for benchmark in &BENCHMARKS {
+                eprintln!("generating the verifier of {}", benchmark.name);
+                let lookup = (benchmark.make_lookup)();
+                write_verifier(
+                    Path::new(vectors_directory),
+                    benchmark.name,
+                    &lookup.circuit,
+                    &directory,
+                    benchmark.verifier_name,
+                );
+            }
+        }
         [directory] => {
             let directory = PathBuf::from(directory);
             std::fs::create_dir_all(&directory).unwrap();
@@ -385,6 +413,9 @@ fn main() {
                 write_case(&directory, benchmark.name, &lookup.circuit, &proof);
             }
         }
-        _ => panic!("usage: merkle <directory> | merkle sweep <benchmark> <directory>"),
+        _ => panic!(
+            "usage: merkle <directory> | merkle sweep <benchmark> <directory> | \
+             merkle verifiers <vectors directory> <directory>"
+        ),
     }
 }

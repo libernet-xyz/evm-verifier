@@ -37,10 +37,11 @@ contract FriHarness {
     FriOptions calldata options,
     FriCommitment calldata commitment
   ) external pure returns (uint256 rounds) {
+    FriVerifier.validateOptions(options);
     return FriVerifier.validateCommitment(options, commitment);
   }
 
-  /// @dev Validates the commitment and verifies a single query at `index` against it, with the
+  /// @dev Validates the parameters and the commitment, and verifies a single query at `index` against it, with the
   ///   folding challenges chained to `transcriptHash`. `proof` is SCPF data with
   ///   `TEST_LAYOUT_IDENTIFIER` containing the openings of the query, and nothing else.
   function verifyQuery(
@@ -53,6 +54,7 @@ contract FriHarness {
   ) external view {
     FriOptions memory decodedOptions = options;
     FriCommitment memory decodedCommitment = commitment;
+    FriVerifier.validateOptions(decodedOptions);
     FriVerifier.validateCommitment(decodedOptions, decodedCommitment);
     uint256[] memory challenges = FriVerifier.foldingChallenges(
       transcriptHash,
@@ -63,7 +65,7 @@ contract FriHarness {
     ProofViewerMethods.close(viewer);
   }
 
-  /// @dev Validates the commitment once, derives its folding challenges once from
+  /// @dev Validates the parameters and the commitment once, derives its folding challenges once from
   ///   `transcriptHash`, and verifies all the queries against it, with `values[i]` being the
   ///   expected evaluation at `indices[i]`. `proof` is SCPF data with `TEST_LAYOUT_IDENTIFIER`
   ///   containing the openings of all the queries, one query after the other.
@@ -77,6 +79,7 @@ contract FriHarness {
   ) external view {
     FriOptions memory decodedOptions = options;
     FriCommitment memory decodedCommitment = commitment;
+    FriVerifier.validateOptions(decodedOptions);
     FriVerifier.validateCommitment(decodedOptions, decodedCommitment);
     uint256[] memory challenges = FriVerifier.foldingChallenges(
       transcriptHash,

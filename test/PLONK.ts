@@ -117,8 +117,6 @@ describe("PLONK verifier", function () {
         options.degreeBound,
         options.securityBits,
         options.blowupLog2,
-        options.foldRate,
-        options.maxRounds,
         options.grindingBits,
       ]);
     });
@@ -425,8 +423,9 @@ describe("PLONK verifier", function () {
       await expect(verify(proof, testCase.circuit)).to.revert(ethers);
     });
 
-    // TODO: enable once the algebraic checks bind the public inputs to the proof.
-    it("rejects a tampered public input");
+    // The algebraic checks, which bind the public inputs to the proof, need the gate constraint of
+    // the circuit, so tampered public inputs are rejected by the generated verifiers of the Merkle
+    // lookup benchmarks (see `GeneratedVerifiers.ts`).
   });
 
   // Checks performed by `Options::validate` and the `from_proto` methods.

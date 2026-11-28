@@ -24,31 +24,6 @@ describe("Keccak256Hash", function () {
     harness = await ethers.deployContract("Keccak256HashHarness");
   });
 
-  // Test vectors from `starkom_pcs::hash::tests::test_keccak256_hash`.
-  describe("hash", function () {
-    it("hash([12])", async function () {
-      expect(await harness.hash([12n])).to.equal(
-        "0xdf6966c971051c3d54ec59162606531493a51404a002842f56009d7e5cf4a8c7",
-      );
-    });
-
-    it("hash([34, 56])", async function () {
-      expect(await harness.hash([34n, 56n])).to.equal(
-        "0x72700d0d963d58363ea77095ddabb7ed1a429a1fe618c8ace040205d52391bb9",
-      );
-    });
-
-    it("hash([78, 90, 12])", async function () {
-      expect(await harness.hash([78n, 90n, 12n])).to.equal(
-        "0x452eb69ea7065787fb9f51a2894ff6a6ff50ae842aaa68b3ad40ed3580117a8a",
-      );
-    });
-
-    it("hash([]) is the hash of the empty string", async function () {
-      expect(await harness.hash([])).to.equal(ethers.keccak256("0x"));
-    });
-  });
-
   // Test vectors from `starkom_pcs::hash::tests::test_keccak256_hash_binary`.
   describe("hashBinary", function () {
     it("first vector", async function () {

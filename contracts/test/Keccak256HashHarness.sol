@@ -5,10 +5,6 @@ import "../Keccak256Hash.sol";
 
 /// @dev Thin wrapper exposing Keccak256Hash internals for testing.
 contract Keccak256HashHarness {
-  function hash(uint256[] calldata inputs) external pure returns (bytes32) {
-    return Keccak256Hash.hash(inputs);
-  }
-
   function hashBinary(bytes32 left, bytes32 right) external pure returns (bytes32) {
     return Keccak256Hash.hashBinary(left, right);
   }

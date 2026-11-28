@@ -1,0 +1,1 @@
+@starkom/evm-verifier/contracts/=contracts/

@@ -4,8 +4,6 @@
     "degreeBound": 4,
     "securityBits": 128,
     "blowupLog2": 4,
-    "foldRate": 1,
-    "maxRounds": 4294967295,
     "grindingBits": 8
   },
   "numRows": 3,

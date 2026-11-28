@@ -32,22 +32,6 @@ contract MerkleHarness {
     return Merkle.hashBaseLeaf(offset, values.length);
   }
 
-  function verify(
-    uint256[] calldata leaf,
-    bytes calldata path,
-    uint256 height,
-    uint256 index,
-    bytes32 rootHash
-  ) external pure {
-    uint256 offset;
-    assembly {
-      offset := leaf.offset
-    }
-    ProofViewer memory viewer = ProofViewerMethods.open(path, TEST_LAYOUT_IDENTIFIER);
-    Merkle.verify(offset, leaf.length, viewer, height, index, rootHash);
-    ProofViewerMethods.close(viewer);
-  }
-
   function verifyPath(
     bytes32 leaf,
     bytes calldata path,
