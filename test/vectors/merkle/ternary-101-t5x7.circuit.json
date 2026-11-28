@@ -1,12 +1,12 @@
 {
-  "commitment": "0x00aef84647a4e40510d20e733f82550fb74cb8ff73deab000633c978767086ca",
+  "commitment": "0x8203c3bc407711f96475c2ba84e250b36208c4eb867b528dc726eec23077d7a2",
   "pcsConfig": {
     "degreeBound": 128,
     "securityBits": 128,
     "blowupLog2": 8,
     "grindingBits": 24
   },
-  "numRows": 103,
+  "numRows": 102,
   "numColumns": 105,
   "numGateSelectors": 3,
   "numQuotientChunks": 8,
@@ -14,7 +14,7 @@
   "rotations": [0, 1],
   "publicCells": [
     {
-      "row": 102,
+      "row": 101,
       "column": 100
     }
   ]

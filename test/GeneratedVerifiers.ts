@@ -22,7 +22,7 @@ const BENCHMARKS: { name: string; verifierName: string }[] = [
   { name: "binary-256-t4x7", verifierName: "Binary256T4X7" },
   { name: "binary-160-t4x7", verifierName: "Binary160T4X7" },
   { name: "ternary-162-t5x7", verifierName: "Ternary162T5X7" },
-  { name: "ternary-102-t5x7", verifierName: "Ternary102T5X7" },
+  { name: "ternary-101-t5x7", verifierName: "Ternary101T5X7" },
 ];
 
 /** A generated verifier, deployed with its external gate libraries. */

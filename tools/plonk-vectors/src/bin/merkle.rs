@@ -12,7 +12,7 @@
 //!   hashed with Poseidon1 T4X7;
 //! - `ternary-162-t5x7`: a ternary tree with 162-trit keys (`FullTernaryChip`), hashed with
 //!   Poseidon1 T5X7;
-//! - `ternary-102-t5x7`: a ternary tree with 102-trit keys, enough for 160 bits (`TernaryChip`),
+//! - `ternary-101-t5x7`: a ternary tree with 101-trit keys, enough for 160 bits (`TernaryChip`),
 //!   hashed with Poseidon1 T5X7.
 //!
 //! The circuits are built like in the large blowup tests of the `merkle` module of
@@ -24,8 +24,9 @@
 //!
 //! Usage:
 //!
-//! - `cargo run --release --bin merkle -- ../../test/vectors/merkle` writes the test case of every
-//!   benchmark, named after it (see `plonk_vectors::write_case`), proven with its FRI settings;
+//! - `cargo run --release --bin merkle -- ../../test/vectors/merkle [<benchmark>...]` writes the
+//!   test case of every benchmark, or of the given ones, named after it (see
+//!   `plonk_vectors::write_case`), proven with its FRI settings;
 //! - `cargo run --release --bin merkle -- sweep <benchmark> <directory>` writes one test case for
 //!   every useful combination of fold rate and number of rounds of a benchmark, to compare them
 //!   with `scripts/tune-merkle-fri.ts`;
@@ -74,14 +75,15 @@ struct Benchmark {
 /// | `binary-256-t4x7`  | fold rate 3, 1 round | 179,020 B | fold rate 2, 1 round: +694 B    |
 /// | `binary-160-t4x7`  | no rounds            | 172,847 B | fold rate 2, 1 round: +883 B    |
 /// | `ternary-162-t5x7` | no rounds            | 192,827 B | fold rate 2, 1 round: +1,378 B  |
-/// | `ternary-102-t5x7` | no rounds            | 184,528 B | fold rate 2, 1 round: +3,052 B  |
+/// | `ternary-101-t5x7` | no rounds            | 184,528 B | fold rate 2, 1 round: +3,052 B  |
 ///
 /// The sizes of the same settings vary by about half a kilobyte between runs because the query
 /// indices are random, but the rankings above are robust: two sweeps agreed on those of the other
 /// benchmarks, and the expected sizes of a model of the proof format agree on all of them. The
 /// sweeps ran before the chips of `starkom-gadgets` reconstructed the keys with Horner's method,
-/// which removed most gate selectors and an opened point, but the differences between the FRI
-/// settings only depend on the degree bound and on the number of queries, which didn't change.
+/// which removed most gate selectors and an opened point, and before `ternary-101-t5x7` replaced a
+/// benchmark with 102-trit keys, but the differences between the FRI settings only depend on the
+/// degree bound and on the number of queries, which didn't change.
 const BENCHMARKS: [Benchmark; 4] = [
     Benchmark {
         name: "binary-256-t4x7",
@@ -105,11 +107,11 @@ const BENCHMARKS: [Benchmark; 4] = [
         make_lookup: ternary_162_t5x7,
     },
     Benchmark {
-        name: "ternary-102-t5x7",
-        verifier_name: "Ternary102T5X7",
+        name: "ternary-101-t5x7",
+        verifier_name: "Ternary101T5X7",
         fold_rate: 1,
         max_rounds: 0,
-        make_lookup: ternary_102_t5x7,
+        make_lookup: ternary_101_t5x7,
     },
 ];
 
@@ -333,9 +335,9 @@ fn ternary_162_t5x7() -> Lookup {
     Lookup::new(&chip, value, root_hash)
 }
 
-fn ternary_102_t5x7() -> Lookup {
-    let (value, path, root_hash) = look_up(3, 102, hash_ternary_t5x7);
-    let chip = TernaryChip::<Scalar, 102, BlueSkyConfigT5X7>::new(DSTS, to_path(path));
+fn ternary_101_t5x7() -> Lookup {
+    let (value, path, root_hash) = look_up(3, 101, hash_ternary_t5x7);
+    let chip = TernaryChip::<Scalar, 101, BlueSkyConfigT5X7>::new(DSTS, to_path(path));
     Lookup::new(&chip, value, root_hash)
 }
 
@@ -403,10 +405,19 @@ fn main() {
                 );
             }
         }
-        [directory] => {
+        [directory, names @ ..] => {
+            for name in names {
+                if !BENCHMARKS.iter().any(|benchmark| benchmark.name == name) {
+                    panic!("unknown benchmark {name}");
+                }
+            }
             let directory = PathBuf::from(directory);
             std::fs::create_dir_all(&directory).unwrap();
-            for benchmark in &BENCHMARKS {
+            // All the benchmarks if none is given.
+            let benchmarks = BENCHMARKS.iter().filter(|benchmark| {
+                names.is_empty() || names.iter().any(|name| name == benchmark.name)
+            });
+            for benchmark in benchmarks {
                 eprintln!("proving {}", benchmark.name);
                 let lookup = (benchmark.make_lookup)();
                 let proof = prove(&lookup, benchmark.fold_rate, benchmark.max_rounds);
@@ -414,7 +425,7 @@ fn main() {
             }
         }
         _ => panic!(
-            "usage: merkle <directory> | merkle sweep <benchmark> <directory> | \
+            "usage: merkle <directory> [<benchmark>...] | merkle sweep <benchmark> <directory> | \
              merkle verifiers <vectors directory> <directory>"
         ),
     }

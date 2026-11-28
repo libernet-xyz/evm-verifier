@@ -17,7 +17,7 @@ const BENCHMARKS: { name: string; description: string }[] = [
   { name: "binary-256-t4x7", description: "binary tree with 256-bit keys, Poseidon1 T4X7" },
   { name: "binary-160-t4x7", description: "binary tree with 160-bit keys, Poseidon1 T4X7" },
   { name: "ternary-162-t5x7", description: "ternary tree with 162-trit keys, Poseidon1 T5X7" },
-  { name: "ternary-102-t5x7", description: "ternary tree with 102-trit keys, Poseidon1 T5X7" },
+  { name: "ternary-101-t5x7", description: "ternary tree with 101-trit keys, Poseidon1 T5X7" },
 ];
 
 describe("Merkle lookup benchmarks", function () {
