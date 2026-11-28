@@ -32,12 +32,12 @@ library Ternary101T5X7Verifier {
       degreeBound: 128,
       securityBits: 128,
       blowupLog2: 8,
-      grindingBits: 24
+      grindingBits: 16
     });
     result.numRows = 102;
     result.numColumns = 105;
     result.numGateSelectors = 3;
-    result.numQuotientChunks = 8;
+    result.numQuotientChunks = 9;
     result.blinded = true;
     result.rotations = new int256[](2);
     result.rotations[0] = 0;

@@ -69,6 +69,12 @@ describe("Generated verifiers of the Merkle lookup benchmarks", function () {
         deployment = await deployVerifier(verifierName);
       });
 
+      // So that the proof has fewer queries than the circuit allows.
+      it("has more grinding bits than the circuit requires", function () {
+        const proof = decodePlonkProof(lookup.scpf, lookup.circuit);
+        expect(proof.options.grindingBits).to.be.greaterThan(lookup.circuit.pcsConfig.grindingBits);
+      });
+
       it("returns the public inputs of a valid proof", async function () {
         const { publicInputs } = decodePlonkProof(lookup.scpf, lookup.circuit);
         expect(await deployment.verifier.verify(lookup.scpf)).to.deep.equal(publicInputs);

@@ -17,10 +17,11 @@
 //!
 //! The circuits are built like in the large blowup tests of the `merkle` module of
 //! `starkom-gadgets`, e.g. `test_full_ternary_smt_with_large_blowup`: they're blinded and have a
-//! blowup factor of 256, but they require 24 grinding bits, so there are ceil((128 - 24) / 8) = 13
-//! FRI queries. Every inner node is the `hash0` of its children with the two DSTs of the chips
-//! (`DSTS`, both zero) as capacity. All the trees hold the same five entries and the proofs look up
-//! the same key.
+//! blowup factor of 256, but they only require 16 grinding bits, i.e. ceil((128 - 16) / 8) = 14 FRI
+//! queries. The proofs provide 24 grinding bits, so they only have ceil((128 - 24) / 8) = 13
+//! queries, like those of a prover that found a better proof of work than the circuit requires.
+//! Every inner node is the `hash0` of its children with the two DSTs of the chips (`DSTS`, both
+//! zero) as capacity. All the trees hold the same five entries and the proofs look up the same key.
 //!
 //! Usage:
 //!
@@ -115,8 +116,12 @@ const BENCHMARKS: [Benchmark; 4] = [
     },
 ];
 
-/// The minimum number of grinding bits of the circuits, which the proofs use too.
-const GRINDING_BITS: usize = 24;
+/// The minimum number of grinding bits of the circuits.
+const CIRCUIT_GRINDING_BITS: usize = 16;
+
+/// The number of grinding bits of the proofs, more than the circuits require, so that the proofs
+/// have fewer queries than the circuits allow.
+const PROOF_GRINDING_BITS: usize = 24;
 
 /// The entries of all the trees, as (key, value) pairs.
 const ENTRIES: [(u64, u64); 5] = [(12, 34), (34, 56), (56, 78), (78, 90), (90, 12)];
@@ -291,7 +296,7 @@ impl Lookup {
                 canonicalize_constraints: false,
                 security_bits: 128,
                 blowup_log2: 8,
-                grinding_bits: GRINDING_BITS,
+                grinding_bits: CIRCUIT_GRINDING_BITS,
                 blind: true,
             })
             .unwrap();
@@ -346,7 +351,7 @@ fn prove(lookup: &Lookup, fold_rate: usize, max_rounds: usize) -> Proof<Scalar, 
     let options = ProofOptions {
         fri_fold_rate: fold_rate,
         max_fri_rounds: max_rounds,
-        grinding_bits: GRINDING_BITS,
+        grinding_bits: PROOF_GRINDING_BITS,
     };
     let proof = lookup
         .circuit

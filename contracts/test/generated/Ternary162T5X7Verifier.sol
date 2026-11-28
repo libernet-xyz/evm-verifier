@@ -32,7 +32,7 @@ library Ternary162T5X7Verifier {
       degreeBound: 256,
       securityBits: 128,
       blowupLog2: 8,
-      grindingBits: 24
+      grindingBits: 16
     });
     result.numRows = 163;
     result.numColumns = 106;

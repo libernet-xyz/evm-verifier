@@ -37,6 +37,12 @@ describe("Merkle lookup benchmarks", function () {
         );
       });
 
+      // So that the proof has fewer queries than the circuit allows.
+      it("has more grinding bits than the circuit requires", function () {
+        const proof = decodePlonkProof(lookup.scpf, lookup.circuit);
+        expect(proof.options.grindingBits).to.be.greaterThan(lookup.circuit.pcsConfig.grindingBits);
+      });
+
       it("verifies the proof against the circuit", async function () {
         const result = await harness.verify(lookup.circuit, lookup.scpf);
         const proof = decodePlonkProof(lookup.scpf, lookup.circuit);

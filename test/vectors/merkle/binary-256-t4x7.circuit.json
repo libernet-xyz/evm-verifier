@@ -4,7 +4,7 @@
     "degreeBound": 512,
     "securityBits": 128,
     "blowupLog2": 8,
-    "grindingBits": 24
+    "grindingBits": 16
   },
   "numRows": 257,
   "numColumns": 94,

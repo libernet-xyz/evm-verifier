@@ -4,12 +4,12 @@
     "degreeBound": 128,
     "securityBits": 128,
     "blowupLog2": 8,
-    "grindingBits": 24
+    "grindingBits": 16
   },
   "numRows": 102,
   "numColumns": 105,
   "numGateSelectors": 3,
-  "numQuotientChunks": 8,
+  "numQuotientChunks": 9,
   "blinded": true,
   "rotations": [0, 1],
   "publicCells": [

@@ -32,7 +32,7 @@ library Binary160T4X7Verifier {
       degreeBound: 256,
       securityBits: 128,
       blowupLog2: 8,
-      grindingBits: 24
+      grindingBits: 16
     });
     result.numRows = 161;
     result.numColumns = 93;
