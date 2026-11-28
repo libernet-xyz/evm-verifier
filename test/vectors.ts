@@ -236,7 +236,7 @@ export const PLONK_LAYOUT_IDENTIFIER = keccak256(toUtf8Bytes("starkom.proto.plon
 export const TEST_LAYOUT_IDENTIFIER = keccak256(toUtf8Bytes("test"));
 
 /** The version of SCPF of the test vectors, i.e. of `starkom-scpf`: major, minor, and patch. */
-export const VERSION: [number, number, number] = [1, 0, 3];
+export const VERSION: [number, number, number] = [1, 1, 0];
 
 /**
  * Encodes the 64-byte header of SCPF data (see `ProofViewer`): the `SCPF` signature, the version

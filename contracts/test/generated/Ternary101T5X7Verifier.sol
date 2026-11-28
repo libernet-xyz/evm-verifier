@@ -8,6 +8,8 @@ import "./Ternary101T5X7Gates.sol";
 
 interface ITernary101T5X7Verifier {
   function verify(bytes calldata proof) external view returns (uint256[1] memory publicInputs);
+
+  function circuit() external pure returns (PlonkCircuit memory result);
 }
 
 library Ternary101T5X7Verifier {
@@ -26,7 +28,7 @@ library Ternary101T5X7Verifier {
     }
   }
 
-  function circuit() internal pure returns (PlonkCircuit memory result) {
+  function circuit() public pure returns (PlonkCircuit memory result) {
     result.commitment = 0x8203c3bc407711f96475c2ba84e250b36208c4eb867b528dc726eec23077d7a2;
     result.pcsConfig = DeepOptions({
       degreeBound: 128,

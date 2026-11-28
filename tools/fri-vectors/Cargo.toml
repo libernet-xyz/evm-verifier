@@ -16,7 +16,7 @@ starkom-ff = "5.0.2"
 # TODO: switch to the published crate once `starkom-pcs` 12 is released.
 starkom-pcs = { path = "../../../pcs" }
 starkom-poly = "4.6.4"
-starkom-scpf = "1.0.3"
+starkom-scpf = "1.1.0"
 
 [build-dependencies]
 pbjson-build = "0.9.0"

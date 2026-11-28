@@ -8,6 +8,8 @@ import "./Binary256T4X7Gates.sol";
 
 interface IBinary256T4X7Verifier {
   function verify(bytes calldata proof) external view returns (uint256[1] memory publicInputs);
+
+  function circuit() external pure returns (PlonkCircuit memory result);
 }
 
 library Binary256T4X7Verifier {
@@ -26,7 +28,7 @@ library Binary256T4X7Verifier {
     }
   }
 
-  function circuit() internal pure returns (PlonkCircuit memory result) {
+  function circuit() public pure returns (PlonkCircuit memory result) {
     result.commitment = 0x8935b334c514ad78997a50acd5d18e75e4ffe91211bc5663a3a3e08b69a139fe;
     result.pcsConfig = DeepOptions({
       degreeBound: 512,

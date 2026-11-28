@@ -8,6 +8,8 @@ import "./Binary160T4X7Gates.sol";
 
 interface IBinary160T4X7Verifier {
   function verify(bytes calldata proof) external view returns (uint256[1] memory publicInputs);
+
+  function circuit() external pure returns (PlonkCircuit memory result);
 }
 
 library Binary160T4X7Verifier {
@@ -26,7 +28,7 @@ library Binary160T4X7Verifier {
     }
   }
 
-  function circuit() internal pure returns (PlonkCircuit memory result) {
+  function circuit() public pure returns (PlonkCircuit memory result) {
     result.commitment = 0x8f81761309bd086a8ba625c1eabdc05a41138aaa05970276731582752bbbaf6a;
     result.pcsConfig = DeepOptions({
       degreeBound: 256,

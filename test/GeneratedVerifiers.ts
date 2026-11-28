@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import hre, { network } from "hardhat";
-import { type BaseContract, type Contract, dataLength } from "ethers";
+import { type BaseContract, type Contract, type Result, dataLength } from "ethers";
 import { decodePlonkProof, encodePlonkProof, loadPlonkCase } from "./vectors.js";
 
 const { ethers } = await network.create();
@@ -73,6 +73,14 @@ describe("Generated verifiers of the Merkle lookup benchmarks", function () {
       it("has more grinding bits than the circuit requires", function () {
         const proof = decodePlonkProof(lookup.scpf, lookup.circuit);
         expect(proof.options.grindingBits).to.be.greaterThan(lookup.circuit.pcsConfig.grindingBits);
+      });
+
+      it("describes the circuit of the proof", async function () {
+        const circuit = await deployment.verifier.circuit();
+        // `toObject` would turn the array of structs into an object, so the cells are converted one
+        // by one.
+        const publicCells = circuit.publicCells.map((cell: Result) => cell.toObject());
+        expect({ ...circuit.toObject(true), publicCells }).to.deep.equal(lookup.circuit);
       });
 
       it("returns the public inputs of a valid proof", async function () {
