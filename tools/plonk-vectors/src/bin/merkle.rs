@@ -50,6 +50,7 @@ use starkom_plonk::{
 use starkom_poseidon::{BlueSkyConfigT4X7, BlueSkyConfigT5X7};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::Instant;
 
 /// A Merkle lookup benchmark.
 struct Benchmark {
@@ -386,10 +387,12 @@ fn main() {
             }
             let circuit = lookup.circuit.as_compressed::<Hash>();
             for (name, fold_rate, rounds) in settings {
-                eprintln!("proving {name}");
+                eprint!("proving {name}... ");
+                let start = Instant::now();
                 let proof = prove(&lookup, fold_rate, rounds);
                 write_circuit(&directory, &name, &circuit, &proof);
                 write_proof(&directory, &name, &proof);
+                eprintln!("{:.1} s", start.elapsed().as_secs_f64());
             }
         }
         [command, vectors_directory, directory] if command == "verifiers" => {
@@ -423,10 +426,12 @@ fn main() {
                 names.is_empty() || names.iter().any(|name| name == benchmark.name)
             });
             for benchmark in benchmarks {
-                eprintln!("proving {}", benchmark.name);
+                eprint!("proving {}... ", benchmark.name);
+                let start = Instant::now();
                 let lookup = (benchmark.make_lookup)();
                 let proof = prove(&lookup, benchmark.fold_rate, benchmark.max_rounds);
                 write_case(&directory, benchmark.name, &lookup.circuit, &proof);
+                eprintln!("{:.1} s", start.elapsed().as_secs_f64());
             }
         }
         _ => panic!(

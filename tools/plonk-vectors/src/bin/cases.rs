@@ -17,6 +17,7 @@ use starkom_plonk::{
     WitnessView, var,
 };
 use std::path::PathBuf;
+use std::time::Instant;
 
 fn cell(row: usize, column: usize) -> Cell {
     Cell::new(row, column)
@@ -103,6 +104,8 @@ fn main() {
         ),
     ];
     for (name, options, proof_settings) in cases {
+        eprint!("proving {name}... ");
+        let start = Instant::now();
         let circuit = build_circuit(options);
         let proof_options = match proof_settings {
             Some((fri_fold_rate, max_fri_rounds, grinding_bits)) => ProofOptions {
@@ -116,5 +119,6 @@ fn main() {
             .prove::<Hash>(make_witness(&circuit), &proof_options)
             .unwrap();
         write_case(&directory, &name.replace(' ', "-"), &circuit, &proof);
+        eprintln!("{:.1} s", start.elapsed().as_secs_f64());
     }
 }
